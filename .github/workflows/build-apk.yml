@@ -45,9 +45,9 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: "v1.0.0 Offline Persian STT"
-          body: "Offline Persian voice typing with Vosk. First launch downloads vosk-model-small-fa-0.42 (~51MB). Then fully offline, no Google."
+          tag_name: v1.1.0
+          name: "v1.1.0 Offline Persian+English STT (Hamdel)"
+          body: "Offline voice typing with Vosk. Persian + English. Menu, About Hamdel, invite to t.me/hamdel_academy. No Google."
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false

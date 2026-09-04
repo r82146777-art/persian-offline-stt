@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">تایپ صوتی فارسی آفلاین</string>
+    <string name="app_name">تایپ صوتی آفلاین همدل</string>
     <string name="status_ready">آماده — دکمه میکروفون را بزنید</string>
     <string name="status_listening">در حال شنیدن… صحبت کنید</string>
-    <string name="status_downloading">در حال دانلود مدل فارسی Vosk…</string>
+    <string name="status_downloading">در حال دانلود مدل Vosk…</string>
     <string name="status_extracting">در حال آماده‌سازی مدل…</string>
     <string name="status_loading">در حال بارگذاری مدل…</string>
     <string name="status_error">خطا</string>
@@ -12,8 +12,29 @@
     <string name="btn_copy">کپی متن</string>
     <string name="btn_clear">پاک کردن</string>
     <string name="hint_text">متن اینجا ظاهر می‌شود…</string>
-    <string name="copied">متن کپی شد</string>
+    <string name="copied">کپی شد</string>
     <string name="need_mic">مجوز میکروفون لازم است</string>
-    <string name="offline_note">بعد از دانلود مدل، کاملاً آفلاین کار می‌کند — بدون گوگل</string>
-    <string name="model_info">مدل: vosk-model-small-fa-0.42 (≈۵۱ مگ) — متن‌باز، Apache 2.0</string>
+    <string name="offline_note">بعد از دانلود مدل، کاملاً آفلاین — بدون گوگل</string>
+    <string name="model_info">موتور: Vosk آفلاین | گروه تکنولوژی همدل</string>
+    <string name="menu_language">انتخاب زبان</string>
+    <string name="menu_help">راهنما</string>
+    <string name="menu_about">درباره ما</string>
+    <string name="menu_channel">کانال آکادمی همدل</string>
+    <string name="lang_fa">فارسی</string>
+    <string name="lang_en">انگلیسی</string>
+    <string name="lang_title">زبان تشخیص گفتار</string>
+    <string name="lang_changed">زبان تغییر کرد. مدل در حال آماده‌سازی است…</string>
+    <string name="help_title">راهنما</string>
+    <string name="help_body">۱. از منو زبان را انتخاب کنید (فارسی یا انگلیسی).\n\n۲. بار اول برای هر زبان، مدل آفلاین یک‌بار با اینترنت دانلود می‌شود (~۴۰ تا ۵۱ مگ).\n\n۳. بعد از آن بدون اینترنت کار می‌کند و به گوگل وصل نیست.\n\n۴. دکمه تایپ صوتی را بزنید، صحبت کنید، توقف را بزنید.\n\n۵. متن را کپی کنید و در هر برنامه‌ای بچسبانید.\n\nنکته: در محیط ساکت و با تلفظ واضح نتیجه بهتر است.</string>
+    <string name="about_title">درباره ما</string>
+    <string name="about_body">تایپ صوتی آفلاین همدل\nنسخه ۱.۱.۰\n\nساخته‌شده توسط گروه تکنولوژی همدل\n\nاین برنامه با موتور متن‌باز Vosk کار می‌کند و گفتار را بدون ارسال به سرورهای گوگل، روی خود گوشی به متن تبدیل می‌کند.\n\nهدف ما ابزارهای کاربردی، امن و در دسترس برای کاربران فارسی‌زبان است.\n\nکانال آکادمی همدل:\nhttps://t.me/hamdel_academy</string>
+    <string name="btn_copy_link">کپی لینک کانال</string>
+    <string name="link_copied">لینک کانال کپی شد</string>
+    <string name="invite_title">دعوت به کانال آکادمی همدل</string>
+    <string name="invite_body">برای آموزش‌ها، به‌روزرسانی‌ها و ابزارهای جدید گروه تکنولوژی همدل، به کانال آکادمی همدل بپیوندید.</string>
+    <string name="invite_dont_show">دیگر بهم نشون نده</string>
+    <string name="invite_cancel">لغو</string>
+    <string name="invite_join">عضو می‌شم</string>
+    <string name="channel_url">https://t.me/hamdel_academy</string>
+    <string name="ok">باشه</string>
 </resources>
