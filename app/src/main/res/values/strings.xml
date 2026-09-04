@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">تایپ صوتی فارسی آفلاین</string>
+    <string name="status_ready">آماده — دکمه میکروفون را بزنید</string>
+    <string name="status_listening">در حال شنیدن… صحبت کنید</string>
+    <string name="status_downloading">در حال دانلود مدل فارسی Vosk…</string>
+    <string name="status_extracting">در حال آماده‌سازی مدل…</string>
+    <string name="status_loading">در حال بارگذاری مدل…</string>
+    <string name="status_error">خطا</string>
+    <string name="btn_mic">تایپ صوتی</string>
+    <string name="btn_stop">توقف</string>
+    <string name="btn_copy">کپی متن</string>
+    <string name="btn_clear">پاک کردن</string>
+    <string name="hint_text">متن اینجا ظاهر می‌شود…</string>
+    <string name="copied">متن کپی شد</string>
+    <string name="need_mic">مجوز میکروفون لازم است</string>
+    <string name="offline_note">بعد از دانلود مدل، کاملاً آفلاین کار می‌کند — بدون گوگل</string>
+    <string name="model_info">مدل: vosk-model-small-fa-0.42 (≈۵۱ مگ) — متن‌باز، Apache 2.0</string>
+</resources>
