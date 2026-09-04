@@ -45,9 +45,9 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.0
-          name: "v1.1.0 Offline Persian+English STT (Hamdel)"
-          body: "Offline voice typing with Vosk. Persian + English. Menu, About Hamdel, invite to t.me/hamdel_academy. No Google."
+          tag_name: v1.2.0
+          name: "v1.2.0 Offline STT Hamdel - Akademi_hamdel"
+          body: "Persian+English offline STT. Help, About (Hamdel managers), invite dialog, channel t.me/Akademi_hamdel"
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
