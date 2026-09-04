@@ -11,7 +11,6 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.CheckBox
@@ -60,7 +59,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_HIDE_INVITE = "hide_invite"
         const val LANG_FA = "fa"
         const val LANG_EN = "en"
-        private const val CHANNEL_URL = "https://t.me/hamdel_academy"
+        private const val CHANNEL_URL = "https://t.me/Akademi_hamdel"
 
         private val MODELS = mapOf(
             LANG_FA to ModelSpec(
