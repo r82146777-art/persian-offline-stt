@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PersianOfflineSTT" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#0F766E</item>
+        <item name="colorPrimaryContainer">#CCFBF1</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#0F766E</item>
+        <item name="android:navigationBarColor">#0F172A</item>
+    </style>
+</resources>
