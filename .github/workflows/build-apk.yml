@@ -45,14 +45,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.4
-          name: "v1.6.4 - Stable full keyboard + long-press space voice"
+          tag_name: v1.6.5
+          name: "v1.6.5 - Full keyboard + long-press space voice"
           body: |
-            ## نسخه ۱.۶.۴
+            ## نسخه ۱.۶.۵
 
-            - کیبورد کامل فارسی/انگلیسی با دکمه‌های جدا (بدون روی‌هم‌افتادن حروف)
-            - فشار طولانی روی SPACE برای تایپ صوتی (بدون شروع خودکار)
-            - دکمه MIC برای شروع/توقف صوت
+            - کیبورد کامل فارسی/انگلیسی (حروف جدا، بدون روی‌هم‌افتادن)
+            - فشار طولانی SPACE برای تایپ صوتی (بدون شروع خودکار)
+            - دکمه MIC برای شروع/توقف
             - لایه اعداد و علائم (دکمه 123)
             - ویبره هنگام تایپ و فعال شدن صوت
             - رفع کرش توقف
