@@ -59,12 +59,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // Keep Vosk as fallback
     implementation("com.alphacephei:vosk-android:0.3.47") {
         exclude(group = "net.java.dev.jna", module = "jna")
     }
     implementation("net.java.dev.jna:jna:5.14.0@aar")
 
-    // Stronger offline engine: Whisper via sherpa-onnx
-    implementation("com.github.k2-fsa:sherpa-onnx:v1.12.6")
+    // sherpa-onnx AAR (downloaded in CI / libs folder)
+    implementation(files("libs/sherpa-onnx.aar"))
 }
