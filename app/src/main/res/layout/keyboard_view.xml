@@ -3,7 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="#1E1E1E">
+    android:background="#1E1E1E"
+    android:padding="4dp">
 
     <TextView
         android:id="@+id/imeStatus"
@@ -16,13 +17,31 @@
         android:padding="4dp"
         android:visibility="gone" />
 
-    <android.inputmethodservice.KeyboardView
-        android:id="@+id/keyboardView"
+    <LinearLayout
+        android:id="@+id/row1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:keyTextColor="#FFFFFF"
-        android:keyTextSize="18sp"
-        android:labelTextSize="14sp"
-        android:background="#1E1E1E"
-        android:shadowRadius="0" />
+        android:orientation="horizontal"
+        android:gravity="center" />
+
+    <LinearLayout
+        android:id="@+id/row2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center" />
+
+    <LinearLayout
+        android:id="@+id/row3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center" />
+
+    <LinearLayout
+        android:id="@+id/row4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center" />
 </LinearLayout>
