@@ -15,8 +15,10 @@
     <string name="copied">کپی شد</string>
     <string name="need_mic">مجوز میکروفون لازم است</string>
     <string name="offline_note">بعد از دانلود مدل، کاملاً آفلاین — بدون گوگل</string>
-    <string name="model_info">موتور: Vosk آفلاین + کیبورد سیستم | گروه تکنولوژی همدل</string>
-    <string name="menu_language">انتخاب زبان</string>
+    <string name="model_info">موتور: Vosk آفلاین + کیبورد کامل | گروه تکنولوژی همدل</string>
+    <string name="menu_language">انتخاب زبان تشخیص</string>
+    <string name="menu_sound">صدای کلید (روشن/خاموش)</string>
+    <string name="menu_vibe">ویبره کلید (روشن/خاموش)</string>
     <string name="menu_help">راهنما</string>
     <string name="menu_about">درباره ما</string>
     <string name="menu_channel">کانال آکادمی همدل</string>
@@ -24,10 +26,14 @@
     <string name="lang_en">انگلیسی</string>
     <string name="lang_title">زبان تشخیص گفتار</string>
     <string name="lang_changed">زبان تغییر کرد. مدل در حال آماده‌سازی است…</string>
+    <string name="sound_on">صدای کلید روشن شد</string>
+    <string name="sound_off">صدای کلید خاموش شد</string>
+    <string name="vibe_on">ویبره روشن شد</string>
+    <string name="vibe_off">ویبره خاموش شد</string>
     <string name="help_title">راهنما</string>
-    <string name="help_body">نحوه استفاده:\n\n۱. از منوی بالا زبان را انتخاب کنید (فارسی یا انگلیسی) و بار اول مدل را دانلود کنید.\n\n۲. بعد از دانلود، برنامه کاملاً آفلاین کار می‌کند.\n\n۳. می‌توانید از خود برنامه استفاده کنید یا آن را به عنوان کیبورد سیستم فعال کنید:\n   تنظیمات گوشی → زبان و ورودی → کیبورد مجازی → مدیریت کیبوردها → «تایپ صوتی آفلاین همدل» را روشن کنید.\n\n۴. در هر برنامه‌ای (واتساپ، پیام‌ها و …) کیبورد را عوض کنید و دکمه میکروفون را بزنید.\n\n۵. اعداد گفتاری به رقم تبدیل می‌شوند.\n\nنکته: محیط ساکت و تلفظ واضح کیفیت را بهتر می‌کند.</string>
+    <string name="help_body">نحوه استفاده از کیبورد:\n\n۱. مدل را از این برنامه دانلود کنید.\n\n۲. تنظیمات گوشی → زبان و ورودی → کیبوردها → «تایپ صوتی آفلاین همدل» را روشن کنید.\n\n۳. در هر برنامه این کیبورد را انتخاب کنید.\n\n۴. تایپ عادی با کلیدها.\n\n۵. تایپ صوتی: فشار طولانی روی «فاصله» یا ضربه روی دکمه 🎤.\n   صدای کوتاه و ویبره یعنی فعال شد.\n   برای توقف دوباره 🎤 را بزنید.\n\n۶. دکمه 123 برای اعداد و علائم، FA/EN برای تعویض زبان.\n\n۷. از منوی برنامه می‌توانید صدای کلید و ویبره را خاموش/روشن کنید.\n\nنکته: محیط ساکت کیفیت تشخیص را بهتر می‌کند.</string>
     <string name="about_title">درباره ما</string>
-    <string name="about_body">تایپ صوتی آفلاین همدل\nنسخه ۱.۴.۰\n\nگروه تکنولوژی همدل\nمدیران: رضا ایمان‌زاده و امیرحسین بابایی\n\nاین برنامه با موتور متن‌باز Vosk کار می‌کند، کاملاً آفلاین است و می‌تواند به عنوان کیبورد صوتی سیستم استفاده شود.\n\nکانال آکادمی همدل:\nhttps://t.me/Akademi_hamdel</string>
+    <string name="about_body">تایپ صوتی آفلاین همدل\nنسخه ۱.۶.۰\n\nگروه تکنولوژی همدل\nمدیران: رضا ایمان‌زاده و امیرحسین بابایی\n\nکیبورد کامل فارسی/انگلیسی + تایپ صوتی آفلاین.\n\nکانال آکادمی همدل:\nhttps://t.me/Akademi_hamdel</string>
     <string name="btn_copy_link">کپی لینک کانال</string>
     <string name="link_copied">لینک کانال کپی شد</string>
     <string name="invite_title">دعوت به کانال آکادمی همدل</string>
@@ -38,10 +44,9 @@
     <string name="channel_url">https://t.me/Akademi_hamdel</string>
     <string name="ok">باشه</string>
 
-    <!-- IME -->
     <string name="ime_name">تایپ صوتی آفلاین همدل</string>
-    <string name="ime_subtype_label">فارسی (صوتی)</string>
-    <string name="ime_subtype_label_en">English (Voice)</string>
+    <string name="ime_subtype_label">فارسی</string>
+    <string name="ime_subtype_label_en">English</string>
     <string name="ime_hint">متن مستقیم در برنامه مقصد نوشته می‌شود</string>
     <string name="ime_need_model">ابتدا از برنامه اصلی مدل را دانلود کنید</string>
 </resources>
