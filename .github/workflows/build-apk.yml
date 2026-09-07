@@ -30,6 +30,17 @@ jobs:
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
+      - name: Download sherpa-onnx AAR
+        run: |
+          mkdir -p app/libs
+          curl -L --fail -o app/libs/sherpa-onnx.aar \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.6/sherpa-onnx-1.12.6.aar" \
+          || curl -L --fail -o app/libs/sherpa-onnx.aar \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.42/sherpa-onnx-1.10.42.aar" \
+          || curl -L --fail -o app/libs/sherpa-onnx.aar \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.40/sherpa-onnx-1.12.40.aar"
+          ls -lh app/libs/
+
       - name: Generate wrapper and build debug APK
         run: |
           gradle wrapper --gradle-version 8.9
@@ -46,20 +57,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.7.0
-          name: "v1.7.0 - Whisper offline engine (stronger accuracy)"
+          name: "v1.7.0 - Whisper offline engine"
           body: |
             ## نسخه ۱.۷.۰ — موتور Whisper آفلاین
 
-            - موتور تشخیص جدید: Whisper tiny (چندزبانه) از طریق sherpa-onnx
-            - دقت بالاتر + پشتیبانی بهتر فارسی/انگلیسی
-            - دانلود مدل حدود ۱۰۰ مگ از داخل برنامه
+            - موتور Whisper tiny چندزبانه (sherpa-onnx)
+            - دقت بالاتر برای فارسی و انگلیسی
+            - دانلود مدل ~۱۰۰ مگ از داخل برنامه
             - کیبورد تک‌ضربه + فشار طولانی فاصله برای صوت
-            - صدای شروع/توقف صوت
-
-            ### استفاده
-            ۱. برنامه را باز کنید و صبر کنید مدل Whisper دانلود شود
-            ۲. کیبورد را در تنظیمات روشن کنید
-            ۳. فشار طولانی فاصله یا MIC برای صوت، توقف برای تشخیص
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
