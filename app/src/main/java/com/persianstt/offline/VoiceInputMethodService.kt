@@ -3,6 +3,8 @@ package com.persianstt.offline
 import android.Manifest
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
+import android.inputmethodservice.Keyboard
+import android.inputmethodservice.KeyboardView
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -10,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.inputmethod.EditorInfo
-import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -30,10 +31,10 @@ import org.vosk.Recognizer
 import java.io.File
 
 /**
- * Voice Input Method Service.
- * Enable it in system keyboard settings, then switch to it in any text field.
+ * Full keyboard IME (Persian + English) with offline voice typing.
+ * Tap 🎤 or long-press space to start/stop voice recognition.
  */
-class VoiceInputMethodService : InputMethodService() {
+class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardActionListener {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var model: Model? = null
@@ -44,11 +45,20 @@ class VoiceInputMethodService : InputMethodService() {
     private val stopLock = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    private var keyboardView: KeyboardView? = null
     private var statusView: TextView? = null
-    private var micButton: Button? = null
+    private var keyboardFa: Keyboard? = null
+    private var keyboardEn: Keyboard? = null
+    private var currentIsFa = true
+    private var isShift = false
 
     companion object {
         private const val SAMPLE_RATE = 16000
+        private const val KEYCODE_MIC = -101
+        private const val KEYCODE_LANG = -100
+        private const val KEYCODE_SHIFT = -1
+        private const val KEYCODE_DELETE = -5
+        private const val KEYCODE_SYMBOLS = -2
     }
 
     override fun onCreate() {
@@ -57,18 +67,19 @@ class VoiceInputMethodService : InputMethodService() {
     }
 
     override fun onCreateInputView(): View {
-        val view = layoutInflater.inflate(R.layout.input_voice, null)
+        val view = layoutInflater.inflate(R.layout.keyboard_view, null)
+        keyboardView = view.findViewById(R.id.keyboardView)
         statusView = view.findViewById(R.id.imeStatus)
-        micButton = view.findViewById(R.id.imeMicButton)
-        micButton?.setOnClickListener {
-            if (isListening) stopListening() else startListening()
-        }
+
+        keyboardFa = Keyboard(this, R.xml.qwerty_fa)
+        keyboardEn = Keyboard(this, R.xml.qwerty_en)
+
+        keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
+        keyboardView?.setOnKeyboardActionListener(this)
+        keyboardView?.isPreviewEnabled = false
+
         ensureModel()
         return view
-    }
-
-    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
-        super.onStartInput(attribute, restarting)
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
@@ -77,25 +88,65 @@ class VoiceInputMethodService : InputMethodService() {
     }
 
     override fun onEvaluateInputViewShown(): Boolean {
-        // Always show our voice panel when this IME is selected
         super.onEvaluateInputViewShown()
         return true
     }
 
     override fun onEvaluateFullscreenMode(): Boolean = false
 
-    private fun ensureModel() {
-        if (model != null) {
-            statusView?.text = getString(R.string.status_ready)
-            micButton?.isEnabled = true
-            return
-        }
-        statusView?.text = getString(R.string.status_loading)
-        micButton?.isEnabled = false
+    // ==================== Keyboard handling ====================
 
+    override fun onKey(primaryCode: Int, keyCodes: IntArray?) {
+        val ic = currentInputConnection ?: return
+        when (primaryCode) {
+            KEYCODE_DELETE -> ic.deleteSurroundingText(1, 0)
+            KEYCODE_SHIFT -> {
+                isShift = !isShift
+                // simple shift toggle (for English mainly)
+            }
+            KEYCODE_LANG -> {
+                currentIsFa = !currentIsFa
+                keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
+            }
+            KEYCODE_MIC -> {
+                if (isListening) stopListening() else startListening()
+            }
+            KEYCODE_SYMBOLS -> {
+                // TODO: symbols layer later
+                Toast.makeText(this, "نمادها به زودی", Toast.LENGTH_SHORT).show()
+            }
+            10 -> ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER))
+            32 -> {
+                // space - long press could also trigger voice, but tap is normal
+                ic.commitText(" ", 1)
+            }
+            else -> {
+                var code = primaryCode
+                if (!currentIsFa && isShift && code in 97..122) {
+                    code -= 32 // uppercase
+                }
+                ic.commitText(code.toChar().toString(), 1)
+                if (isShift) isShift = false
+            }
+        }
+    }
+
+    override fun onPress(primaryCode: Int) {}
+    override fun onRelease(primaryCode: Int) {}
+    override fun onText(text: CharSequence?) {
+        currentInputConnection?.commitText(text, 1)
+    }
+    override fun swipeLeft() {}
+    override fun swipeRight() {}
+    override fun swipeDown() {}
+    override fun swipeUp() {}
+
+    // ==================== Voice recognition ====================
+
+    private fun ensureModel() {
+        if (model != null) return
         scope.launch(Dispatchers.IO) {
             try {
-                // Use applicationContext so path is identical to MainActivity
                 val base = File(applicationContext.filesDir, "vosk-models")
                 val fa = File(base, "vosk-model-small-fa-0.42")
                 val en = File(base, "vosk-model-small-en-us-0.15")
@@ -106,22 +157,20 @@ class VoiceInputMethodService : InputMethodService() {
                 }
                 if (dir == null) {
                     withContext(Dispatchers.Main) {
+                        statusView?.visibility = View.VISIBLE
                         statusView?.text = getString(R.string.ime_need_model)
-                        micButton?.isEnabled = false
-                        Toast.makeText(this@VoiceInputMethodService, R.string.ime_need_model, Toast.LENGTH_LONG).show()
                     }
                     return@launch
                 }
                 val m = Model(dir.absolutePath)
                 withContext(Dispatchers.Main) {
                     model = m
-                    statusView?.text = getString(R.string.status_ready)
-                    micButton?.isEnabled = true
+                    statusView?.visibility = View.GONE
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    statusView?.text = "${getString(R.string.status_error)}: ${e.message}"
-                    micButton?.isEnabled = false
+                    statusView?.visibility = View.VISIBLE
+                    statusView?.text = "خطا: ${e.message}"
                 }
             }
         }
@@ -163,7 +212,7 @@ class VoiceInputMethodService : InputMethodService() {
                 audioRecord = ar
                 isListening = true
             }
-            micButton?.text = getString(R.string.btn_stop)
+            statusView?.visibility = View.VISIBLE
             statusView?.text = getString(R.string.status_listening)
 
             listenJob = scope.launch(Dispatchers.IO) {
@@ -179,9 +228,7 @@ class VoiceInputMethodService : InputMethodService() {
                                 val text = NumberNormalizer.normalize(extractText(r.result))
                                 if (text.isNotBlank()) {
                                     withContext(Dispatchers.Main) {
-                                        try {
-                                            currentInputConnection?.commitText("$text ", 1)
-                                        } catch (_: Exception) {}
+                                        try { currentInputConnection?.commitText("$text ", 1) } catch (_: Exception) {}
                                     }
                                 }
                             }
@@ -190,7 +237,7 @@ class VoiceInputMethodService : InputMethodService() {
                 }
             }
         } catch (e: Exception) {
-            statusView?.text = "${getString(R.string.status_error)}: ${e.message}"
+            statusView?.text = "خطا: ${e.message}"
             stopListening()
         }
     }
@@ -204,9 +251,7 @@ class VoiceInputMethodService : InputMethodService() {
             synchronized(stopLock) {
                 try {
                     audioRecord?.let { ar ->
-                        try {
-                            if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) ar.stop()
-                        } catch (_: Exception) {}
+                        try { if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) ar.stop() } catch (_: Exception) {}
                         try { ar.release() } catch (_: Exception) {}
                     }
                 } catch (_: Exception) {}
@@ -225,10 +270,7 @@ class VoiceInputMethodService : InputMethodService() {
                 try { recognizer?.close() } catch (_: Exception) {}
                 recognizer = null
             }
-            try {
-                micButton?.text = getString(R.string.btn_mic)
-                statusView?.text = getString(R.string.status_ready)
-            } catch (_: Exception) {}
+            statusView?.visibility = View.GONE
         }
     }
 
