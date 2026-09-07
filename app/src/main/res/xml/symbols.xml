@@ -30,7 +30,7 @@
         <Key android:codes="41" android:keyLabel=")" android:keyEdgeFlags="right" />
     </Row>
     <Row>
-        <Key android:codes="-3" android:keyLabel="=\\<" android:keyWidth="15%p" android:keyEdgeFlags="left" />
+        <Key android:codes="-3" android:keyLabel="#+" android:keyWidth="15%p" android:keyEdgeFlags="left" />
         <Key android:codes="33" android:keyLabel="!" />
         <Key android:codes="34" android:keyLabel="\"" />
         <Key android:codes="39" android:keyLabel="'" />
