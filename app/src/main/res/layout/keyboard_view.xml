@@ -20,11 +20,9 @@
         android:id="@+id/keyboardView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:keyBackground="@android:drawable/btn_keyboard_key"
         android:keyTextColor="#FFFFFF"
         android:keyTextSize="18sp"
         android:labelTextSize="14sp"
         android:background="#1E1E1E"
-        android:shadowColor="#000000"
         android:shadowRadius="0" />
 </LinearLayout>
