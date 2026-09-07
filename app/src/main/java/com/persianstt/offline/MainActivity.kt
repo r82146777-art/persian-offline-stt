@@ -11,6 +11,8 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.CheckBox
@@ -48,8 +50,10 @@ class MainActivity : AppCompatActivity() {
     private var audioRecord: AudioRecord? = null
     private var listenJob: Job? = null
     @Volatile private var isListening = false
+    private val stopLock = Any()
     private var finalText = StringBuilder()
     private var currentLang = LANG_FA
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
         private const val REQ_MIC = 1001
@@ -354,18 +358,22 @@ class MainActivity : AppCompatActivity() {
                 throw IllegalStateException("AudioRecord not initialized")
             }
             ar.startRecording()
-            recognizer = rec
-            audioRecord = ar
-            isListening = true
+            synchronized(stopLock) {
+                recognizer = rec
+                audioRecord = ar
+                isListening = true
+            }
             binding.micButton.text = getString(R.string.btn_stop)
             binding.status.text = getString(R.string.status_listening)
 
             listenJob = lifecycleScope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(4096)
                 while (isActive && isListening) {
-                    val n = try { audioRecord?.read(buffer, 0, buffer.size) ?: -1 } catch (_: Exception) { -1 }
+                    val n = try {
+                        synchronized(stopLock) { audioRecord?.read(buffer, 0, buffer.size) ?: -1 }
+                    } catch (_: Exception) { -1 }
                     if (n > 0) {
-                        val r = recognizer ?: break
+                        val r = synchronized(stopLock) { recognizer } ?: break
                         try {
                             if (r.acceptWaveForm(buffer, n)) {
                                 val text = NumberNormalizer.normalize(extractText(r.result))
@@ -390,7 +398,7 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             }
-                        } catch (_: Exception) { /* ignore single frame errors */ }
+                        } catch (_: Exception) { }
                     }
                 }
             }
@@ -401,38 +409,50 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopListening() {
+        // First signal the loop to exit
         isListening = false
         try { listenJob?.cancel() } catch (_: Exception) {}
         listenJob = null
 
-        try {
-            audioRecord?.let {
-                try { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } catch (_: Exception) {}
-                try { it.release() } catch (_: Exception) {}
+        // Give the IO loop a moment to exit the while, then clean resources under lock
+        mainHandler.post {
+            synchronized(stopLock) {
+                try {
+                    audioRecord?.let { ar ->
+                        try {
+                            if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                                ar.stop()
+                            }
+                        } catch (_: Exception) {}
+                        try { ar.release() } catch (_: Exception) {}
+                    }
+                } catch (_: Exception) {}
+                audioRecord = null
+
+                try {
+                    val finalJson = recognizer?.finalResult
+                    if (finalJson != null) {
+                        val text = NumberNormalizer.normalize(extractText(finalJson))
+                        if (text.isNotBlank() && !isFinishing && !isDestroyed) {
+                            if (finalText.isNotEmpty()) finalText.append(" ")
+                            finalText.append(text)
+                            try {
+                                binding.resultText.setText(finalText.toString())
+                            } catch (_: Exception) {}
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                try { recognizer?.close() } catch (_: Exception) {}
+                recognizer = null
             }
-        } catch (_: Exception) {}
-        audioRecord = null
 
-        try {
-            val final = recognizer?.finalResult
-            if (final != null) {
-                val text = NumberNormalizer.normalize(extractText(final))
-                if (text.isNotBlank() && !isFinishing && !isDestroyed) {
-                    if (finalText.isNotEmpty()) finalText.append(" ")
-                    finalText.append(text)
-                    binding.resultText.setText(finalText.toString())
-                }
+            if (!isFinishing && !isDestroyed) {
+                try {
+                    binding.micButton.text = getString(R.string.btn_mic)
+                    binding.status.text = getString(R.string.status_ready)
+                } catch (_: Exception) {}
             }
-        } catch (_: Exception) {}
-
-        try { recognizer?.close() } catch (_: Exception) {}
-        recognizer = null
-
-        if (!isFinishing && !isDestroyed) {
-            try {
-                binding.micButton.text = getString(R.string.btn_mic)
-                binding.status.text = getString(R.string.status_ready)
-            } catch (_: Exception) {}
         }
     }
 
@@ -457,7 +477,6 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == REQ_MIC) {
             if (isFinishing || isDestroyed) return
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Small delay to let permission dialog fully close and activity resume
                 binding.micButton.post {
                     if (!isFinishing && !isDestroyed) startListening()
                 }
@@ -468,7 +487,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        // Do not force stop on pause (permission dialog also pauses). Only clean on destroy.
         super.onPause()
     }
 
