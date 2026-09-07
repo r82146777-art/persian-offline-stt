@@ -6,6 +6,8 @@ import android.inputmethodservice.InputMethodService
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
@@ -28,18 +30,19 @@ import org.vosk.Recognizer
 import java.io.File
 
 /**
- * Simple voice-only Input Method so the user can select this as a keyboard
- * and dictate into any app (WhatsApp, messages, etc.).
- * Uses the same offline Vosk engine. Model must already be downloaded via MainActivity.
+ * Voice Input Method Service.
+ * Enable it in system keyboard settings, then switch to it in any text field.
  */
 class VoiceInputMethodService : InputMethodService() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var model: Model? = null
     private var recognizer: Recognizer? = null
     private var audioRecord: AudioRecord? = null
     private var listenJob: Job? = null
     @Volatile private var isListening = false
+    private val stopLock = Any()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var statusView: TextView? = null
     private var micButton: Button? = null
@@ -64,10 +67,22 @@ class VoiceInputMethodService : InputMethodService() {
         return view
     }
 
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+    }
+
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         ensureModel()
     }
+
+    override fun onEvaluateInputViewShown(): Boolean {
+        // Always show our voice panel when this IME is selected
+        super.onEvaluateInputViewShown()
+        return true
+    }
+
+    override fun onEvaluateFullscreenMode(): Boolean = false
 
     private fun ensureModel() {
         if (model != null) {
@@ -77,10 +92,11 @@ class VoiceInputMethodService : InputMethodService() {
         }
         statusView?.text = getString(R.string.status_loading)
         micButton?.isEnabled = false
+
         scope.launch(Dispatchers.IO) {
             try {
-                // Prefer Persian model; fall back to English if present
-                val base = File(filesDir, "vosk-models")
+                // Use applicationContext so path is identical to MainActivity
+                val base = File(applicationContext.filesDir, "vosk-models")
                 val fa = File(base, "vosk-model-small-fa-0.42")
                 val en = File(base, "vosk-model-small-en-us-0.15")
                 val dir = when {
@@ -96,8 +112,9 @@ class VoiceInputMethodService : InputMethodService() {
                     }
                     return@launch
                 }
-                model = Model(dir.absolutePath)
+                val m = Model(dir.absolutePath)
                 withContext(Dispatchers.Main) {
+                    model = m
                     statusView?.text = getString(R.string.status_ready)
                     micButton?.isEnabled = true
                 }
@@ -113,13 +130,13 @@ class VoiceInputMethodService : InputMethodService() {
     private fun startListening() {
         if (model == null) {
             Toast.makeText(this, R.string.ime_need_model, Toast.LENGTH_SHORT).show()
+            ensureModel()
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
             Toast.makeText(this, R.string.need_mic, Toast.LENGTH_LONG).show()
-            // User must grant via MainActivity or system settings
             return
         }
         if (isListening) return
@@ -141,27 +158,30 @@ class VoiceInputMethodService : InputMethodService() {
                 throw IllegalStateException("AudioRecord init failed")
             }
             ar.startRecording()
-            recognizer = rec
-            audioRecord = ar
-            isListening = true
+            synchronized(stopLock) {
+                recognizer = rec
+                audioRecord = ar
+                isListening = true
+            }
             micButton?.text = getString(R.string.btn_stop)
             statusView?.text = getString(R.string.status_listening)
 
             listenJob = scope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(4096)
-                val sb = StringBuilder()
                 while (isActive && isListening) {
-                    val n = try { audioRecord?.read(buffer, 0, buffer.size) ?: -1 } catch (_: Exception) { -1 }
+                    val n = try {
+                        synchronized(stopLock) { audioRecord?.read(buffer, 0, buffer.size) ?: -1 }
+                    } catch (_: Exception) { -1 }
                     if (n > 0) {
-                        val r = recognizer ?: break
+                        val r = synchronized(stopLock) { recognizer } ?: break
                         try {
                             if (r.acceptWaveForm(buffer, n)) {
                                 val text = NumberNormalizer.normalize(extractText(r.result))
                                 if (text.isNotBlank()) {
-                                    if (sb.isNotEmpty()) sb.append(" ")
-                                    sb.append(text)
                                     withContext(Dispatchers.Main) {
-                                        currentInputConnection?.commitText(text + " ", 1)
+                                        try {
+                                            currentInputConnection?.commitText("$text ", 1)
+                                        } catch (_: Exception) {}
                                     }
                                 }
                             }
@@ -179,26 +199,37 @@ class VoiceInputMethodService : InputMethodService() {
         isListening = false
         try { listenJob?.cancel() } catch (_: Exception) {}
         listenJob = null
-        try {
-            audioRecord?.let {
-                try { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } catch (_: Exception) {}
-                try { it.release() } catch (_: Exception) {}
+
+        mainHandler.post {
+            synchronized(stopLock) {
+                try {
+                    audioRecord?.let { ar ->
+                        try {
+                            if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) ar.stop()
+                        } catch (_: Exception) {}
+                        try { ar.release() } catch (_: Exception) {}
+                    }
+                } catch (_: Exception) {}
+                audioRecord = null
+
+                try {
+                    val finalJson = recognizer?.finalResult
+                    if (finalJson != null) {
+                        val text = NumberNormalizer.normalize(extractText(finalJson))
+                        if (text.isNotBlank()) {
+                            try { currentInputConnection?.commitText("$text ", 1) } catch (_: Exception) {}
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                try { recognizer?.close() } catch (_: Exception) {}
+                recognizer = null
             }
-        } catch (_: Exception) {}
-        audioRecord = null
-        try {
-            val final = recognizer?.finalResult
-            if (final != null) {
-                val text = NumberNormalizer.normalize(extractText(final))
-                if (text.isNotBlank()) {
-                    currentInputConnection?.commitText(text + " ", 1)
-                }
-            }
-        } catch (_: Exception) {}
-        try { recognizer?.close() } catch (_: Exception) {}
-        recognizer = null
-        micButton?.text = getString(R.string.btn_mic)
-        statusView?.text = getString(R.string.status_ready)
+            try {
+                micButton?.text = getString(R.string.btn_mic)
+                statusView?.text = getString(R.string.status_ready)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun extractText(json: String): String =
