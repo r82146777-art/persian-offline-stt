@@ -47,7 +47,7 @@ class MainActivity : AppCompatActivity() {
     private var recognizer: Recognizer? = null
     private var audioRecord: AudioRecord? = null
     private var listenJob: Job? = null
-    private var isListening = false
+    @Volatile private var isListening = false
     private var finalText = StringBuilder()
     private var currentLang = LANG_FA
 
@@ -132,7 +132,7 @@ class MainActivity : AppCompatActivity() {
                     currentLang = selected
                     prefs.edit().putString(KEY_LANG, selected).apply()
                     updateLangBadge()
-                    model?.close()
+                    try { model?.close() } catch (_: Exception) {}
                     model = null
                     Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
                     prepareModel()
@@ -213,13 +213,15 @@ class MainActivity : AppCompatActivity() {
                 binding.progress.isIndeterminate = false
                 val modelPath = withContext(Dispatchers.IO) { ensureModelReady() }
                 withContext(Dispatchers.IO) {
-                    model?.close()
+                    try { model?.close() } catch (_: Exception) {}
                     model = Model(modelPath)
                 }
+                if (isFinishing || isDestroyed) return@launch
                 binding.status.text = getString(R.string.status_ready)
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = true
             } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 binding.status.text = "${getString(R.string.status_error)}: ${e.message}"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = false
@@ -235,6 +237,7 @@ class MainActivity : AppCompatActivity() {
         if (marker.exists()) return modelDir.absolutePath
 
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             binding.status.text = getString(R.string.status_downloading)
             binding.progress.visibility = android.view.View.VISIBLE
             binding.progress.isIndeterminate = false
@@ -245,12 +248,14 @@ class MainActivity : AppCompatActivity() {
         val zipFile = File(cacheDir, "${spec.dirName}.zip")
         downloadFile(spec.url, zipFile) { pct ->
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 binding.progress.progress = pct
                 binding.status.text = "${getString(R.string.status_downloading)} $pct%"
             }
         }
 
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             binding.status.text = getString(R.string.status_extracting)
             binding.progress.isIndeterminate = true
         }
@@ -316,6 +321,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startListening() {
+        if (isFinishing || isDestroyed) return
         if (model == null) {
             Toast.makeText(this, getString(R.string.status_loading), Toast.LENGTH_SHORT).show()
             return
@@ -326,49 +332,65 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
             return
         }
+        if (isListening) return
+
         try {
-            recognizer = Recognizer(model, SAMPLE_RATE.toFloat())
+            val rec = Recognizer(model, SAMPLE_RATE.toFloat())
             val minBuf = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
             )
-            audioRecord = AudioRecord(
+            if (minBuf == AudioRecord.ERROR || minBuf == AudioRecord.ERROR_BAD_VALUE) {
+                throw IllegalStateException("AudioRecord buffer error")
+            }
+            val ar = AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
                 minBuf.coerceAtLeast(SAMPLE_RATE / 2)
             )
-            audioRecord?.startRecording()
+            if (ar.state != AudioRecord.STATE_INITIALIZED) {
+                ar.release()
+                throw IllegalStateException("AudioRecord not initialized")
+            }
+            ar.startRecording()
+            recognizer = rec
+            audioRecord = ar
             isListening = true
             binding.micButton.text = getString(R.string.btn_stop)
             binding.status.text = getString(R.string.status_listening)
+
             listenJob = lifecycleScope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(4096)
                 while (isActive && isListening) {
-                    val n = audioRecord?.read(buffer, 0, buffer.size) ?: -1
+                    val n = try { audioRecord?.read(buffer, 0, buffer.size) ?: -1 } catch (_: Exception) { -1 }
                     if (n > 0) {
-                        val rec = recognizer ?: break
-                        if (rec.acceptWaveForm(buffer, n)) {
-                            val text = extractText(rec.result)
-                            if (text.isNotBlank()) {
-                                withContext(Dispatchers.Main) {
-                                    if (finalText.isNotEmpty()) finalText.append(" ")
-                                    finalText.append(text)
-                                    binding.resultText.setText(finalText.toString())
-                                    binding.resultText.setSelection(binding.resultText.text.length)
+                        val r = recognizer ?: break
+                        try {
+                            if (r.acceptWaveForm(buffer, n)) {
+                                val text = NumberNormalizer.normalize(extractText(r.result))
+                                if (text.isNotBlank()) {
+                                    withContext(Dispatchers.Main) {
+                                        if (isFinishing || isDestroyed) return@withContext
+                                        if (finalText.isNotEmpty()) finalText.append(" ")
+                                        finalText.append(text)
+                                        binding.resultText.setText(finalText.toString())
+                                        binding.resultText.setSelection(binding.resultText.text.length)
+                                    }
+                                }
+                            } else {
+                                val partial = NumberNormalizer.normalize(extractPartial(r.partialResult))
+                                if (partial.isNotBlank()) {
+                                    withContext(Dispatchers.Main) {
+                                        if (isFinishing || isDestroyed) return@withContext
+                                        val base = finalText.toString()
+                                        val shown = if (base.isBlank()) partial else "$base $partial"
+                                        binding.resultText.setText(shown)
+                                        binding.resultText.setSelection(binding.resultText.text.length)
+                                    }
                                 }
                             }
-                        } else {
-                            val partial = extractPartial(rec.partialResult)
-                            if (partial.isNotBlank()) {
-                                withContext(Dispatchers.Main) {
-                                    val base = finalText.toString()
-                                    val shown = if (base.isBlank()) partial else "$base $partial"
-                                    binding.resultText.setText(shown)
-                                    binding.resultText.setSelection(binding.resultText.text.length)
-                                }
-                            }
-                        }
+                        } catch (_: Exception) { /* ignore single frame errors */ }
                     }
                 }
             }
@@ -380,25 +402,38 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopListening() {
         isListening = false
-        listenJob?.cancel()
+        try { listenJob?.cancel() } catch (_: Exception) {}
         listenJob = null
-        try { audioRecord?.stop(); audioRecord?.release() } catch (_: Exception) {}
+
+        try {
+            audioRecord?.let {
+                try { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } catch (_: Exception) {}
+                try { it.release() } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
         audioRecord = null
+
         try {
             val final = recognizer?.finalResult
             if (final != null) {
-                val text = extractText(final)
-                if (text.isNotBlank()) {
+                val text = NumberNormalizer.normalize(extractText(final))
+                if (text.isNotBlank() && !isFinishing && !isDestroyed) {
                     if (finalText.isNotEmpty()) finalText.append(" ")
                     finalText.append(text)
                     binding.resultText.setText(finalText.toString())
                 }
             }
         } catch (_: Exception) {}
-        recognizer?.close()
+
+        try { recognizer?.close() } catch (_: Exception) {}
         recognizer = null
-        binding.micButton.text = getString(R.string.btn_mic)
-        binding.status.text = getString(R.string.status_ready)
+
+        if (!isFinishing && !isDestroyed) {
+            try {
+                binding.micButton.text = getString(R.string.btn_mic)
+                binding.status.text = getString(R.string.status_ready)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun extractText(json: String): String =
@@ -420,14 +455,26 @@ class MainActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_MIC) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) startListening()
-            else Toast.makeText(this, getString(R.string.need_mic), Toast.LENGTH_LONG).show()
+            if (isFinishing || isDestroyed) return
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Small delay to let permission dialog fully close and activity resume
+                binding.micButton.post {
+                    if (!isFinishing && !isDestroyed) startListening()
+                }
+            } else {
+                Toast.makeText(this, getString(R.string.need_mic), Toast.LENGTH_LONG).show()
+            }
         }
+    }
+
+    override fun onPause() {
+        // Do not force stop on pause (permission dialog also pauses). Only clean on destroy.
+        super.onPause()
     }
 
     override fun onDestroy() {
         stopListening()
-        model?.close()
+        try { model?.close() } catch (_: Exception) {}
         model = null
         super.onDestroy()
     }
