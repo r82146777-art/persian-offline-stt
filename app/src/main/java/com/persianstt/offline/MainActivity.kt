@@ -28,25 +28,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import org.vosk.LibVosk
-import org.vosk.LogLevel
-import org.vosk.Model
-import org.vosk.Recognizer
-import java.io.BufferedInputStream
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.zip.ZipInputStream
+import java.util.concurrent.CopyOnWriteArrayList
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: SharedPreferences
-    private var model: Model? = null
-    private var recognizer: Recognizer? = null
     private var audioRecord: AudioRecord? = null
     private var listenJob: Job? = null
     @Volatile private var isListening = false
@@ -54,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private var finalText = StringBuilder()
     private var currentLang = LANG_FA
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val pcmChunks = CopyOnWriteArrayList<ShortArray>()
 
     companion object {
         private const val REQ_MIC = 1001
@@ -66,20 +54,7 @@ class MainActivity : AppCompatActivity() {
         const val LANG_FA = "fa"
         const val LANG_EN = "en"
         private const val CHANNEL_URL = "https://t.me/Akademi_hamdel"
-
-        private val MODELS = mapOf(
-            LANG_FA to ModelSpec(
-                "vosk-model-small-fa-0.42",
-                "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip"
-            ),
-            LANG_EN to ModelSpec(
-                "vosk-model-small-en-us-0.15",
-                "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-            )
-        )
     }
-
-    data class ModelSpec(val dirName: String, val url: String)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,8 +65,6 @@ class MainActivity : AppCompatActivity() {
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         currentLang = prefs.getString(KEY_LANG, LANG_FA) ?: LANG_FA
         updateLangBadge()
-
-        LibVosk.setLogLevel(LogLevel.WARNINGS)
 
         binding.micButton.setOnClickListener {
             if (isListening) stopListening() else startListening()
@@ -138,9 +111,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLanguagePicker() {
-        val labels = arrayOf(getString(R.string.lang_fa), getString(R.string.lang_en))
-        val codes = arrayOf(LANG_FA, LANG_EN)
-        val checked = if (currentLang == LANG_EN) 1 else 0
+        val labels = arrayOf(getString(R.string.lang_fa), getString(R.string.lang_en), "خودکار (هر دو)")
+        val codes = arrayOf(LANG_FA, LANG_EN, "")
+        val checked = when (currentLang) {
+            LANG_EN -> 1
+            LANG_FA -> 0
+            else -> 2
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.lang_title)
             .setSingleChoiceItems(labels, checked) { dialog, which ->
@@ -150,8 +127,7 @@ class MainActivity : AppCompatActivity() {
                     currentLang = selected
                     prefs.edit().putString(KEY_LANG, selected).apply()
                     updateLangBadge()
-                    try { model?.close() } catch (_: Exception) {}
-                    model = null
+                    WhisperEngine.release()
                     Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
                     prepareModel()
                 }
@@ -229,119 +205,37 @@ class MainActivity : AppCompatActivity() {
             try {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
-                val modelPath = withContext(Dispatchers.IO) { ensureModelReady() }
+                binding.progress.visibility = android.view.View.VISIBLE
+                binding.status.text = "دانلود مدل Whisper (دقت بالا)…"
                 withContext(Dispatchers.IO) {
-                    try { model?.close() } catch (_: Exception) {}
-                    model = Model(modelPath)
+                    WhisperEngine.ensureModel(this@MainActivity) { pct ->
+                        runOnUiThread {
+                            if (!isFinishing && !isDestroyed) {
+                                binding.progress.progress = pct
+                                binding.status.text = "دانلود Whisper $pct%"
+                            }
+                        }
+                    }
+                    WhisperEngine.load(this@MainActivity, currentLang)
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = getString(R.string.status_ready)
+                binding.status.text = "آماده — موتور Whisper آفلاین"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = true
             } catch (e: Exception) {
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "${getString(R.string.status_error)}: ${e.message}"
+                binding.status.text = "خطا: ${e.message}"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = false
             }
         }
     }
 
-    private fun ensureModelReady(): String {
-        val spec = MODELS[currentLang] ?: MODELS[LANG_FA]!!
-        val base = File(filesDir, "vosk-models")
-        val modelDir = File(base, spec.dirName)
-        val marker = File(modelDir, "am/final.mdl")
-        if (marker.exists()) return modelDir.absolutePath
-
-        runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
-            binding.status.text = getString(R.string.status_downloading)
-            binding.progress.visibility = android.view.View.VISIBLE
-            binding.progress.isIndeterminate = false
-            binding.progress.progress = 0
-        }
-
-        if (!base.exists()) base.mkdirs()
-        val zipFile = File(cacheDir, "${spec.dirName}.zip")
-        downloadFile(spec.url, zipFile) { pct ->
-            runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
-                binding.progress.progress = pct
-                binding.status.text = "${getString(R.string.status_downloading)} $pct%"
-            }
-        }
-
-        runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
-            binding.status.text = getString(R.string.status_extracting)
-            binding.progress.isIndeterminate = true
-        }
-
-        if (modelDir.exists()) modelDir.deleteRecursively()
-        unzip(zipFile, base)
-        zipFile.delete()
-        if (!marker.exists()) throw IllegalStateException("Model incomplete after extract")
-        return modelDir.absolutePath
-    }
-
-    private fun downloadFile(urlStr: String, dest: File, onProgress: (Int) -> Unit) {
-        val url = URL(urlStr)
-        val conn = url.openConnection() as HttpURLConnection
-        conn.connectTimeout = 30000
-        conn.readTimeout = 120000
-        conn.requestMethod = "GET"
-        conn.connect()
-        if (conn.responseCode !in 200..299) {
-            throw IllegalStateException("Download failed: HTTP ${conn.responseCode}")
-        }
-        val total = conn.contentLengthLong
-        BufferedInputStream(conn.inputStream).use { input ->
-            FileOutputStream(dest).use { output ->
-                val buf = ByteArray(64 * 1024)
-                var read: Int
-                var done = 0L
-                var lastPct = -1
-                while (input.read(buf).also { read = it } != -1) {
-                    output.write(buf, 0, read)
-                    done += read
-                    if (total > 0) {
-                        val pct = ((done * 100) / total).toInt().coerceIn(0, 100)
-                        if (pct != lastPct) {
-                            lastPct = pct
-                            onProgress(pct)
-                        }
-                    }
-                }
-            }
-        }
-        conn.disconnect()
-    }
-
-    private fun unzip(zipFile: File, targetDir: File) {
-        ZipInputStream(BufferedInputStream(FileInputStream(zipFile))).use { zis ->
-            var entry = zis.nextEntry
-            val buf = ByteArray(64 * 1024)
-            while (entry != null) {
-                val outFile = File(targetDir, entry.name)
-                if (entry.isDirectory) outFile.mkdirs()
-                else {
-                    outFile.parentFile?.mkdirs()
-                    FileOutputStream(outFile).use { out ->
-                        var n: Int
-                        while (zis.read(buf).also { n = it } != -1) out.write(buf, 0, n)
-                    }
-                }
-                zis.closeEntry()
-                entry = zis.nextEntry
-            }
-        }
-    }
-
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (model == null) {
-            Toast.makeText(this, getString(R.string.status_loading), Toast.LENGTH_SHORT).show()
+        if (!WhisperEngine.isReady(this)) {
+            Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
+            prepareModel()
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
@@ -353,13 +247,11 @@ class MainActivity : AppCompatActivity() {
         if (isListening) return
 
         try {
-            val rec = Recognizer(model, SAMPLE_RATE.toFloat())
+            pcmChunks.clear()
             val minBuf = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
             )
-            if (minBuf == AudioRecord.ERROR || minBuf == AudioRecord.ERROR_BAD_VALUE) {
-                throw IllegalStateException("AudioRecord buffer error")
-            }
+            if (minBuf <= 0) throw IllegalStateException("AudioRecord buffer error")
             val ar = AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 SAMPLE_RATE,
@@ -373,7 +265,6 @@ class MainActivity : AppCompatActivity() {
             }
             ar.startRecording()
             synchronized(stopLock) {
-                recognizer = rec
                 audioRecord = ar
                 isListening = true
             }
@@ -386,38 +277,11 @@ class MainActivity : AppCompatActivity() {
                     val n = try {
                         synchronized(stopLock) { audioRecord?.read(buffer, 0, buffer.size) ?: -1 }
                     } catch (_: Exception) { -1 }
-                    if (n > 0) {
-                        val r = synchronized(stopLock) { recognizer } ?: break
-                        try {
-                            if (r.acceptWaveForm(buffer, n)) {
-                                val text = NumberNormalizer.normalize(extractText(r.result))
-                                if (text.isNotBlank()) {
-                                    withContext(Dispatchers.Main) {
-                                        if (isFinishing || isDestroyed) return@withContext
-                                        if (finalText.isNotEmpty()) finalText.append(" ")
-                                        finalText.append(text)
-                                        binding.resultText.setText(finalText.toString())
-                                        binding.resultText.setSelection(binding.resultText.text.length)
-                                    }
-                                }
-                            } else {
-                                val partial = NumberNormalizer.normalize(extractPartial(r.partialResult))
-                                if (partial.isNotBlank()) {
-                                    withContext(Dispatchers.Main) {
-                                        if (isFinishing || isDestroyed) return@withContext
-                                        val base = finalText.toString()
-                                        val shown = if (base.isBlank()) partial else "$base $partial"
-                                        binding.resultText.setText(shown)
-                                        binding.resultText.setSelection(binding.resultText.text.length)
-                                    }
-                                }
-                            }
-                        } catch (_: Exception) { }
-                    }
+                    if (n > 0) pcmChunks.add(buffer.copyOf(n))
                 }
             }
         } catch (e: Exception) {
-            binding.status.text = "${getString(R.string.status_error)}: ${e.message}"
+            binding.status.text = "خطا: ${e.message}"
             stopListening()
         }
     }
@@ -438,37 +302,37 @@ class MainActivity : AppCompatActivity() {
                     }
                 } catch (_: Exception) {}
                 audioRecord = null
-
-                try {
-                    val finalJson = try { recognizer?.finalResult } catch (_: Exception) { null }
-                    if (finalJson != null) {
-                        val text = NumberNormalizer.normalize(extractText(finalJson))
-                        if (text.isNotBlank() && !isFinishing && !isDestroyed) {
-                            if (finalText.isNotEmpty()) finalText.append(" ")
-                            finalText.append(text)
-                            try { binding.resultText.setText(finalText.toString()) } catch (_: Exception) {}
-                        }
-                    }
-                } catch (_: Exception) {}
-
-                try { recognizer?.close() } catch (_: Exception) {}
-                recognizer = null
             }
 
             if (!isFinishing && !isDestroyed) {
-                try {
-                    binding.micButton.text = getString(R.string.btn_mic)
-                    binding.status.text = getString(R.string.status_ready)
-                } catch (_: Exception) {}
+                binding.micButton.text = getString(R.string.btn_mic)
+                binding.status.text = "در حال تشخیص Whisper…"
+            }
+
+            val chunks = pcmChunks.toList()
+            pcmChunks.clear()
+            lifecycleScope.launch(Dispatchers.IO) {
+                val total = chunks.sumOf { it.size }
+                val pcm = ShortArray(total)
+                var o = 0
+                for (c in chunks) {
+                    System.arraycopy(c, 0, pcm, o, c.size)
+                    o += c.size
+                }
+                val text = if (pcm.isNotEmpty()) WhisperEngine.transcribe(pcm, SAMPLE_RATE) else ""
+                withContext(Dispatchers.Main) {
+                    if (isFinishing || isDestroyed) return@withContext
+                    if (text.isNotBlank()) {
+                        if (finalText.isNotEmpty()) finalText.append(" ")
+                        finalText.append(text)
+                        binding.resultText.setText(finalText.toString())
+                        binding.resultText.setSelection(binding.resultText.text.length)
+                    }
+                    binding.status.text = "آماده — موتور Whisper آفلاین"
+                }
             }
         }
     }
-
-    private fun extractText(json: String): String =
-        try { JSONObject(json).optString("text", "").trim() } catch (_: Exception) { "" }
-
-    private fun extractPartial(json: String): String =
-        try { JSONObject(json).optString("partial", "").trim() } catch (_: Exception) { "" }
 
     private fun copyText() {
         val text = binding.resultText.text?.toString().orEmpty()
@@ -494,14 +358,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-    }
-
     override fun onDestroy() {
         stopListening()
-        try { model?.close() } catch (_: Exception) {}
-        model = null
+        WhisperEngine.release()
         super.onDestroy()
     }
 }
