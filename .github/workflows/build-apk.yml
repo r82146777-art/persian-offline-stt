@@ -45,16 +45,19 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.2
-          name: "v1.6.2 - Full keyboard fixes"
+          tag_name: v1.6.3
+          name: "v1.6.3 - Long-press Space + Symbols + No auto voice"
           body: |
-            ## نسخه ۱.۶.۲
+            ## نسخه ۱.۶.۳
 
-            - فشار طولانی فاصله برای تایپ صوتی (بدون شروع خودکار)
-            - صدا و ویبره
-            - لایه اعداد و علائم
+            - تایپ صوتی فقط با فشار طولانی فاصله یا دکمه MIC (بدون شروع خودکار)
+            - ویبره هنگام فعال شدن صوت
+            - لایه اعداد و علائم (دکمه 123)
             - چیدمان فارسی بهبود یافته
-            - رفع کرش
+            - رفع کرش هنگام توقف
+            - تنظیم ویبره از منوی برنامه
+
+            استفاده: فشار طولانی روی فاصله برای صوت، دوباره MIC برای توقف.
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
