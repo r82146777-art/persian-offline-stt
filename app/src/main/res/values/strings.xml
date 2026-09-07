@@ -15,7 +15,7 @@
     <string name="copied">کپی شد</string>
     <string name="need_mic">مجوز میکروفون لازم است</string>
     <string name="offline_note">بعد از دانلود مدل، کاملاً آفلاین — بدون گوگل</string>
-    <string name="model_info">موتور: Vosk آفلاین | گروه تکنولوژی همدل</string>
+    <string name="model_info">موتور: Vosk آفلاین + کیبورد سیستم | گروه تکنولوژی همدل</string>
     <string name="menu_language">انتخاب زبان</string>
     <string name="menu_help">راهنما</string>
     <string name="menu_about">درباره ما</string>
@@ -25,9 +25,9 @@
     <string name="lang_title">زبان تشخیص گفتار</string>
     <string name="lang_changed">زبان تغییر کرد. مدل در حال آماده‌سازی است…</string>
     <string name="help_title">راهنما</string>
-    <string name="help_body">نحوه استفاده از برنامه:\n\n۱. از منوی بالا (سه‌نقطه) زبان را انتخاب کنید: فارسی یا انگلیسی.\n\n۲. بار اول برای هر زبان، مدل آفلاین یک‌بار با اینترنت دانلود می‌شود (حدود ۴۰ تا ۵۱ مگابایت).\n\n۳. بعد از دانلود، برنامه کاملاً آفلاین کار می‌کند و به گوگل وصل نیست.\n\n۴. دکمه «تایپ صوتی» را بزنید و صحبت کنید.\n\n۵. دکمه «توقف» را بزنید تا تشخیص تمام شود.\n\n۶. با «کپی متن» متن را کپی کنید و در هر برنامه‌ای (واتساپ، پیام‌ها و …) بچسبانید.\n\nنکته: در محیط ساکت و با تلفظ واضح، کیفیت تشخیص بهتر است.</string>
+    <string name="help_body">نحوه استفاده:\n\n۱. از منوی بالا زبان را انتخاب کنید (فارسی یا انگلیسی) و بار اول مدل را دانلود کنید.\n\n۲. بعد از دانلود، برنامه کاملاً آفلاین کار می‌کند.\n\n۳. می‌توانید از خود برنامه استفاده کنید یا آن را به عنوان کیبورد سیستم فعال کنید:\n   تنظیمات گوشی → زبان و ورودی → کیبورد مجازی → مدیریت کیبوردها → «تایپ صوتی آفلاین همدل» را روشن کنید.\n\n۴. در هر برنامه‌ای (واتساپ، پیام‌ها و …) کیبورد را عوض کنید و دکمه میکروفون را بزنید.\n\n۵. اعداد گفتاری به رقم تبدیل می‌شوند.\n\nنکته: محیط ساکت و تلفظ واضح کیفیت را بهتر می‌کند.</string>
     <string name="about_title">درباره ما</string>
-    <string name="about_body">تایپ صوتی آفلاین همدل\nنسخه ۱.۲.۰\n\nگروه تکنولوژی همدل\nمدیران: رضا ایمان‌زاده و امیرحسین بابایی\n\nاین برنامه با موتور متن‌باز Vosk کار می‌کند و گفتار را بدون ارسال به سرورهای گوگل، روی خود گوشی به متن تبدیل می‌کند.\n\nکانال آکادمی همدل:\nhttps://t.me/Akademi_hamdel</string>
+    <string name="about_body">تایپ صوتی آفلاین همدل\nنسخه ۱.۴.۰\n\nگروه تکنولوژی همدل\nمدیران: رضا ایمان‌زاده و امیرحسین بابایی\n\nاین برنامه با موتور متن‌باز Vosk کار می‌کند، کاملاً آفلاین است و می‌تواند به عنوان کیبورد صوتی سیستم استفاده شود.\n\nکانال آکادمی همدل:\nhttps://t.me/Akademi_hamdel</string>
     <string name="btn_copy_link">کپی لینک کانال</string>
     <string name="link_copied">لینک کانال کپی شد</string>
     <string name="invite_title">دعوت به کانال آکادمی همدل</string>
@@ -37,4 +37,11 @@
     <string name="invite_join">عضو می‌شم</string>
     <string name="channel_url">https://t.me/Akademi_hamdel</string>
     <string name="ok">باشه</string>
+
+    <!-- IME -->
+    <string name="ime_name">تایپ صوتی آفلاین همدل</string>
+    <string name="ime_subtype_label">فارسی (صوتی)</string>
+    <string name="ime_subtype_label_en">English (Voice)</string>
+    <string name="ime_hint">متن مستقیم در برنامه مقصد نوشته می‌شود</string>
+    <string name="ime_need_model">ابتدا از برنامه اصلی مدل را دانلود کنید</string>
 </resources>
