@@ -45,15 +45,21 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.3.0
-          name: "v1.3.0 - Fix crashes + Number to digits"
+          tag_name: v1.4.0
+          name: "v1.4.0 - System Keyboard (IME) + crash fixes"
           body: |
-            ## تغییرات نسخه ۱.۳.۰
-            - رفع کرش هنگام دادن اجازه میکروفون (اولین بار)
-            - رفع مشکل دکمه توقف و خروج ناگهانی از برنامه
-            - تبدیل اعداد گفتاری به رقم (فارسی و انگلیسی) بدون فاصله بین رقم‌ها
-            - پایداری بیشتر lifecycle و AudioRecord
-            - کانال: https://t.me/Akademi_hamdel
+            ## تغییرات نسخه ۱.۴.۰
+            - اضافه شدن کیبورد سیستم (Input Method) برای تایپ صوتی مستقیم در هر برنامه
+            - رفع کرش اجازه میکروفون و دکمه توقف
+            - تبدیل اعداد گفتاری به رقم بدون فاصله
+            - کاملاً آفلاین بعد از دانلود مدل
+
+            ### نحوه فعال‌سازی کیبورد:
+            ۱. مدل را یک‌بار از داخل برنامه دانلود کنید
+            ۲. تنظیمات گوشی → زبان و ورودی → کیبوردها → «تایپ صوتی آفلاین همدل» را روشن کنید
+            ۳. در هر اپلیکیشنی کیبورد را عوض کنید و صحبت کنید
+
+            کانال: https://t.me/Akademi_hamdel
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
