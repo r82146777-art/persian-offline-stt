@@ -11,8 +11,11 @@ android {
         applicationId = "com.persianstt.offline"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.6.6"
+        versionCode = 11
+        versionName = "1.7.0"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -42,6 +45,9 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
@@ -53,8 +59,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
+    // Keep Vosk as fallback
     implementation("com.alphacephei:vosk-android:0.3.47") {
         exclude(group = "net.java.dev.jna", module = "jna")
     }
     implementation("net.java.dev.jna:jna:5.14.0@aar")
+
+    // Stronger offline engine: Whisper via sherpa-onnx
+    implementation("com.github.k2-fsa:sherpa-onnx:v1.12.6")
 }
