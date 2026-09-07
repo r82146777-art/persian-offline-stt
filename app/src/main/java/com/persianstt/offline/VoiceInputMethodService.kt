@@ -4,9 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.inputmethodservice.InputMethodService
-import android.inputmethodservice.Keyboard
-import android.inputmethodservice.KeyboardView
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -15,8 +14,14 @@ import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -35,7 +40,7 @@ import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
 
-class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardActionListener {
+class VoiceInputMethodService : InputMethodService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var model: Model? = null
@@ -46,38 +51,39 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
     private val stopLock = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private var keyboardView: KeyboardView? = null
     private var statusView: TextView? = null
-    private var keyboardFa: Keyboard? = null
-    private var keyboardEn: Keyboard? = null
-    private var keyboardSymbols: Keyboard? = null
+    private var row1: LinearLayout? = null
+    private var row2: LinearLayout? = null
+    private var row3: LinearLayout? = null
+    private var row4: LinearLayout? = null
+
     private var currentIsFa = true
     private var isSymbols = false
     private var isShift = false
-
     private var prefs: SharedPreferences? = null
     private var vibrator: Vibrator? = null
 
-    private var spacePressed = false
-    private var spaceLongTriggered = false
-    private val longPressRunnable = Runnable {
-        if (spacePressed && !isListening) {
-            spaceLongTriggered = true
-            startListening()
-        }
-    }
-
     companion object {
         private const val SAMPLE_RATE = 16000
-        private const val KEYCODE_MIC = -101
-        private const val KEYCODE_LANG = -100
-        private const val KEYCODE_SHIFT = -1
-        private const val KEYCODE_DELETE = -5
-        private const val KEYCODE_SYMBOLS = -2
-        private const val KEYCODE_SYMBOLS2 = -3
-        private const val LONG_PRESS_MS = 450L
         private const val PREFS = "hamdel_stt"
         private const val KEY_VIBE = "key_vibe"
+        private const val LONG_PRESS_MS = 450L
+
+        private val FA_ROWS = listOf(
+            listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج", "چ"),
+            listOf("ش", "س", "ی", "ب", "ل", "ا", "ت", "ن", "م", "ک", "گ"),
+            listOf("⇧", "ظ", "ط", "ز", "ر", "ذ", "د", "پ", "و", "⌫")
+        )
+        private val EN_ROWS = listOf(
+            listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
+            listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
+            listOf("⇧", "z", "x", "c", "v", "b", "n", "m", "⌫")
+        )
+        private val SYM_ROWS = listOf(
+            listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+            listOf("@", "#", "$", "%", "&", "*", "-", "=", "(", ")"),
+            listOf("!", "\"", "'", ":", ";", "/", "?", ",", ".", "⌫")
+        )
     }
 
     override fun onCreate() {
@@ -90,20 +96,15 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
 
     override fun onCreateInputView(): View {
         val view = layoutInflater.inflate(R.layout.keyboard_view, null)
-        keyboardView = view.findViewById(R.id.keyboardView)
         statusView = view.findViewById(R.id.imeStatus)
-
-        keyboardFa = Keyboard(this, R.xml.qwerty_fa)
-        keyboardEn = Keyboard(this, R.xml.qwerty_en)
-        keyboardSymbols = Keyboard(this, R.xml.symbols)
-
-        keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
-        keyboardView?.setOnKeyboardActionListener(this)
-        keyboardView?.isPreviewEnabled = false
+        row1 = view.findViewById(R.id.row1)
+        row2 = view.findViewById(R.id.row2)
+        row3 = view.findViewById(R.id.row3)
+        row4 = view.findViewById(R.id.row4)
 
         isListening = false
         statusView?.visibility = View.GONE
-
+        buildKeyboard()
         ensureModel()
         return view
     }
@@ -126,6 +127,125 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
 
     override fun onEvaluateFullscreenMode(): Boolean = false
 
+    private fun buildKeyboard() {
+        row1?.removeAllViews()
+        row2?.removeAllViews()
+        row3?.removeAllViews()
+        row4?.removeAllViews()
+
+        val rows = when {
+            isSymbols -> SYM_ROWS
+            currentIsFa -> FA_ROWS
+            else -> EN_ROWS
+        }
+
+        val containers = listOf(row1, row2, row3)
+        rows.forEachIndexed { i, keys ->
+            containers.getOrNull(i)?.let { row ->
+                keys.forEach { label ->
+                    row.addView(makeKey(label))
+                }
+            }
+        }
+
+        // Bottom row: 123 | MIC | ،/. | SPACE | EN/FA | ↵
+        row4?.addView(makeKey(if (isSymbols) "ABC" else "123", weight = 1.2f))
+        row4?.addView(makeKey("MIC", weight = 1.2f))
+        if (currentIsFa && !isSymbols) {
+            row4?.addView(makeKey("،", weight = 0.8f))
+        } else if (!isSymbols) {
+            row4?.addView(makeKey(",", weight = 0.8f))
+        }
+        row4?.addView(makeKey("SPACE", weight = 3.2f))
+        row4?.addView(makeKey(".", weight = 0.8f))
+        row4?.addView(makeKey(if (currentIsFa) "EN" else "FA", weight = 1.0f))
+        row4?.addView(makeKey("↵", weight = 1.2f))
+    }
+
+    private fun makeKey(label: String, weight: Float = 1f): Button {
+        val btn = Button(this)
+        val lp = LinearLayout.LayoutParams(0, dp(48), weight)
+        lp.setMargins(dp(2), dp(2), dp(2), dp(2))
+        btn.layoutParams = lp
+        btn.text = label
+        btn.setTextColor(Color.WHITE)
+        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (label.length > 2) 11f else 16f)
+        btn.setBackgroundColor(Color.parseColor("#333333"))
+        btn.setPadding(0, 0, 0, 0)
+        btn.minWidth = 0
+        btn.minimumWidth = 0
+        btn.isAllCaps = false
+
+        if (label == "SPACE") {
+            var longTriggered = false
+            val longRunnable = Runnable {
+                longTriggered = true
+                if (!isListening) startListening()
+            }
+            btn.setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        longTriggered = false
+                        mainHandler.postDelayed(longRunnable, LONG_PRESS_MS)
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        mainHandler.removeCallbacks(longRunnable)
+                        if (!longTriggered) {
+                            currentInputConnection?.commitText(" ", 1)
+                            vibe(15)
+                        }
+                        v.performClick()
+                        true
+                    }
+                    else -> false
+                }
+            }
+        } else {
+            btn.setOnClickListener { onKeyTap(label) }
+        }
+        return btn
+    }
+
+    private fun onKeyTap(label: String) {
+        val ic = currentInputConnection ?: return
+        vibe(15)
+        when (label) {
+            "⌫" -> ic.deleteSurroundingText(1, 0)
+            "⇧" -> isShift = !isShift
+            "MIC" -> if (isListening) stopListening() else startListening()
+            "123" -> {
+                isSymbols = true
+                buildKeyboard()
+            }
+            "ABC" -> {
+                isSymbols = false
+                buildKeyboard()
+            }
+            "EN", "FA" -> {
+                isSymbols = false
+                currentIsFa = !currentIsFa
+                buildKeyboard()
+            }
+            "↵" -> {
+                ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER))
+                ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ENTER))
+            }
+            "SPACE" -> ic.commitText(" ", 1)
+            else -> {
+                var t = label
+                if (!currentIsFa && !isSymbols && isShift && t.length == 1 && t[0] in 'a'..'z') {
+                    t = t.uppercase()
+                    isShift = false
+                }
+                ic.commitText(t, 1)
+            }
+        }
+    }
+
+    private fun dp(v: Int): Int =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
+
     private fun vibe(ms: Long = 25) {
         if (prefs?.getBoolean(KEY_VIBE, true) != true) return
         try {
@@ -137,76 +257,6 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
             }
         } catch (_: Exception) {}
     }
-
-    override fun onPress(primaryCode: Int) {
-        if (primaryCode == 32) {
-            spacePressed = true
-            spaceLongTriggered = false
-            mainHandler.postDelayed(longPressRunnable, LONG_PRESS_MS)
-        }
-        if (primaryCode != KEYCODE_MIC && primaryCode != 32) vibe(18)
-    }
-
-    override fun onRelease(primaryCode: Int) {
-        if (primaryCode == 32) {
-            mainHandler.removeCallbacks(longPressRunnable)
-            spacePressed = false
-        }
-    }
-
-    override fun onKey(primaryCode: Int, keyCodes: IntArray?) {
-        val ic = currentInputConnection ?: return
-
-        if (primaryCode == 32 && spaceLongTriggered) {
-            spaceLongTriggered = false
-            return
-        }
-
-        when (primaryCode) {
-            KEYCODE_DELETE -> ic.deleteSurroundingText(1, 0)
-            KEYCODE_SHIFT -> isShift = !isShift
-            KEYCODE_LANG -> {
-                if (isSymbols) {
-                    isSymbols = false
-                    keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
-                } else {
-                    currentIsFa = !currentIsFa
-                    keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
-                }
-            }
-            KEYCODE_MIC -> {
-                if (isListening) stopListening() else startListening()
-            }
-            KEYCODE_SYMBOLS, KEYCODE_SYMBOLS2 -> {
-                isSymbols = !isSymbols
-                keyboardView?.keyboard = if (isSymbols) keyboardSymbols else {
-                    if (currentIsFa) keyboardFa else keyboardEn
-                }
-            }
-            10 -> {
-                ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER))
-                ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ENTER))
-            }
-            32 -> ic.commitText(" ", 1)
-            else -> {
-                if (primaryCode > 0) {
-                    var code = primaryCode
-                    if (!currentIsFa && !isSymbols && isShift && code in 97..122) code -= 32
-                    ic.commitText(code.toChar().toString(), 1)
-                    if (isShift) isShift = false
-                }
-            }
-        }
-    }
-
-    override fun onText(text: CharSequence?) {
-        currentInputConnection?.commitText(text, 1)
-    }
-
-    override fun swipeLeft() {}
-    override fun swipeRight() {}
-    override fun swipeDown() {}
-    override fun swipeUp() {}
 
     private fun ensureModel() {
         if (model != null) return
@@ -278,7 +328,6 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
                 audioRecord = ar
                 isListening = true
             }
-
             vibe(40)
             statusView?.visibility = View.VISIBLE
             statusView?.text = "در حال شنیدن… برای توقف MIC را بزنید"
@@ -327,7 +376,6 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
                     }
                 } catch (_: Exception) {}
                 audioRecord = null
-
                 try {
                     val finalJson = try { recognizer?.finalResult } catch (_: Exception) { null }
                     if (finalJson != null) {
@@ -337,7 +385,6 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
                         }
                     }
                 } catch (_: Exception) {}
-
                 try { recognizer?.close() } catch (_: Exception) {}
                 recognizer = null
             }
@@ -352,7 +399,6 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
         try { JSONObject(json).optString("text", "").trim() } catch (_: Exception) { "" }
 
     override fun onDestroy() {
-        try { mainHandler.removeCallbacks(longPressRunnable) } catch (_: Exception) {}
         stopListening()
         try { model?.close() } catch (_: Exception) {}
         model = null
