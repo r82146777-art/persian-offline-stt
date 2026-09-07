@@ -1,15 +1,23 @@
 package com.persianstt.offline
 
 import android.Manifest
+import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
 import android.inputmethodservice.Keyboard
 import android.inputmethodservice.KeyboardView
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.ToneGenerator
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.TextView
@@ -31,8 +39,11 @@ import org.vosk.Recognizer
 import java.io.File
 
 /**
- * Full keyboard IME (Persian + English) with offline voice typing.
- * Tap 🎤 or long-press space to start/stop voice recognition.
+ * Full keyboard IME (Persian + English + symbols) with offline voice.
+ * - Normal tap = type
+ * - Long-press SPACE or tap 🎤 = start/stop voice
+ * - Sound + vibration feedback (settings)
+ * - Never auto-starts listening
  */
 class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardActionListener {
 
@@ -49,8 +60,24 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
     private var statusView: TextView? = null
     private var keyboardFa: Keyboard? = null
     private var keyboardEn: Keyboard? = null
+    private var keyboardSymbols: Keyboard? = null
     private var currentIsFa = true
+    private var isSymbols = false
     private var isShift = false
+
+    private var prefs: SharedPreferences? = null
+    private var toneGen: ToneGenerator? = null
+    private var vibrator: Vibrator? = null
+
+    // Long-press space detection
+    private var spacePressed = false
+    private var spaceLongTriggered = false
+    private val longPressRunnable = Runnable {
+        if (spacePressed && !isListening) {
+            spaceLongTriggered = true
+            startListening()
+        }
+    }
 
     companion object {
         private const val SAMPLE_RATE = 16000
@@ -59,11 +86,27 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
         private const val KEYCODE_SHIFT = -1
         private const val KEYCODE_DELETE = -5
         private const val KEYCODE_SYMBOLS = -2
+        private const val KEYCODE_SYMBOLS2 = -3
+        private const val LONG_PRESS_MS = 450L
+        private const val PREFS = "hamdel_stt"
+        private const val KEY_SOUND = "key_sound"
+        private const val KEY_VIBE = "key_vibe"
     }
 
     override fun onCreate() {
         super.onCreate()
         LibVosk.setLogLevel(LogLevel.WARNINGS)
+        prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        try {
+            toneGen = ToneGenerator(AudioManager.STREAM_SYSTEM, 60)
+        } catch (_: Exception) {}
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vm.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
     }
 
     override fun onCreateInputView(): View {
@@ -73,10 +116,15 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
 
         keyboardFa = Keyboard(this, R.xml.qwerty_fa)
         keyboardEn = Keyboard(this, R.xml.qwerty_en)
+        keyboardSymbols = Keyboard(this, R.xml.symbols)
 
         keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
         keyboardView?.setOnKeyboardActionListener(this)
         keyboardView?.isPreviewEnabled = false
+
+        // Never auto-start
+        isListening = false
+        statusView?.visibility = View.GONE
 
         ensureModel()
         return view
@@ -84,7 +132,14 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        // Ensure we do not start listening automatically
+        if (isListening) stopListening()
         ensureModel()
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        if (isListening) stopListening()
+        super.onFinishInputView(finishingInput)
     }
 
     override fun onEvaluateInputViewShown(): Boolean {
@@ -94,48 +149,121 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
 
     override fun onEvaluateFullscreenMode(): Boolean = false
 
+    // ==================== Feedback ====================
+
+    private fun playClick() {
+        if (prefs?.getBoolean(KEY_SOUND, true) != true) return
+        try {
+            toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 25)
+        } catch (_: Exception) {}
+    }
+
+    private fun playVoiceStart() {
+        if (prefs?.getBoolean(KEY_SOUND, true) != true) return
+        try {
+            toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 120)
+        } catch (_: Exception) {}
+    }
+
+    private fun vibe(ms: Long = 25) {
+        if (prefs?.getBoolean(KEY_VIBE, true) != true) return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(ms)
+            }
+        } catch (_: Exception) {}
+    }
+
     // ==================== Keyboard handling ====================
+
+    override fun onPress(primaryCode: Int) {
+        if (primaryCode == 32) {
+            spacePressed = true
+            spaceLongTriggered = false
+            mainHandler.postDelayed(longPressRunnable, LONG_PRESS_MS)
+        }
+        if (primaryCode != 32) playClick()
+        if (primaryCode != KEYCODE_MIC && primaryCode != 32) vibe(18)
+    }
+
+    override fun onRelease(primaryCode: Int) {
+        if (primaryCode == 32) {
+            mainHandler.removeCallbacks(longPressRunnable)
+            spacePressed = false
+        }
+    }
 
     override fun onKey(primaryCode: Int, keyCodes: IntArray?) {
         val ic = currentInputConnection ?: return
+
+        // If long-press on space already started voice, do not insert space
+        if (primaryCode == 32 && spaceLongTriggered) {
+            spaceLongTriggered = false
+            return
+        }
+
         when (primaryCode) {
-            KEYCODE_DELETE -> ic.deleteSurroundingText(1, 0)
+            KEYCODE_DELETE -> {
+                ic.deleteSurroundingText(1, 0)
+            }
             KEYCODE_SHIFT -> {
                 isShift = !isShift
-                // simple shift toggle (for English mainly)
             }
             KEYCODE_LANG -> {
-                currentIsFa = !currentIsFa
-                keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
+                if (isSymbols) {
+                    isSymbols = false
+                    keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
+                } else {
+                    currentIsFa = !currentIsFa
+                    keyboardView?.keyboard = if (currentIsFa) keyboardFa else keyboardEn
+                }
             }
             KEYCODE_MIC -> {
                 if (isListening) stopListening() else startListening()
             }
-            KEYCODE_SYMBOLS -> {
-                // TODO: symbols layer later
-                Toast.makeText(this, "نمادها به زودی", Toast.LENGTH_SHORT).show()
+            KEYCODE_SYMBOLS, KEYCODE_SYMBOLS2 -> {
+                isSymbols = !isSymbols
+                keyboardView?.keyboard = if (isSymbols) keyboardSymbols else {
+                    if (currentIsFa) keyboardFa else keyboardEn
+                }
             }
-            10 -> ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER))
+            10 -> {
+                ic.sendKeyEvent(
+                    android.view.KeyEvent(
+                        android.view.KeyEvent.ACTION_DOWN,
+                        android.view.KeyEvent.KEYCODE_ENTER
+                    )
+                )
+                ic.sendKeyEvent(
+                    android.view.KeyEvent(
+                        android.view.KeyEvent.ACTION_UP,
+                        android.view.KeyEvent.KEYCODE_ENTER
+                    )
+                )
+            }
             32 -> {
-                // space - long press could also trigger voice, but tap is normal
                 ic.commitText(" ", 1)
             }
             else -> {
-                var code = primaryCode
-                if (!currentIsFa && isShift && code in 97..122) {
-                    code -= 32 // uppercase
+                if (primaryCode > 0) {
+                    var code = primaryCode
+                    if (!currentIsFa && !isSymbols && isShift && code in 97..122) {
+                        code -= 32
+                    }
+                    ic.commitText(code.toChar().toString(), 1)
+                    if (isShift) isShift = false
                 }
-                ic.commitText(code.toChar().toString(), 1)
-                if (isShift) isShift = false
             }
         }
     }
 
-    override fun onPress(primaryCode: Int) {}
-    override fun onRelease(primaryCode: Int) {}
     override fun onText(text: CharSequence?) {
         currentInputConnection?.commitText(text, 1)
     }
+
     override fun swipeLeft() {}
     override fun swipeRight() {}
     override fun swipeDown() {}
@@ -165,12 +293,12 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
                 val m = Model(dir.absolutePath)
                 withContext(Dispatchers.Main) {
                     model = m
-                    statusView?.visibility = View.GONE
+                    if (!isListening) statusView?.visibility = View.GONE
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     statusView?.visibility = View.VISIBLE
-                    statusView?.text = "خطا: ${e.message}"
+                    statusView?.text = "خطا مدل: ${e.message}"
                 }
             }
         }
@@ -195,6 +323,7 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
             val minBuf = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
             )
+            if (minBuf <= 0) throw IllegalStateException("buffer error")
             val ar = AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 SAMPLE_RATE,
@@ -212,8 +341,12 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
                 audioRecord = ar
                 isListening = true
             }
+
+            playVoiceStart()
+            vibe(40)
+
             statusView?.visibility = View.VISIBLE
-            statusView?.text = getString(R.string.status_listening)
+            statusView?.text = "🎤 در حال شنیدن… برای توقف دکمه میکروفون را بزنید"
 
             listenJob = scope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(4096)
@@ -228,7 +361,9 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
                                 val text = NumberNormalizer.normalize(extractText(r.result))
                                 if (text.isNotBlank()) {
                                     withContext(Dispatchers.Main) {
-                                        try { currentInputConnection?.commitText("$text ", 1) } catch (_: Exception) {}
+                                        try {
+                                            currentInputConnection?.commitText("$text ", 1)
+                                        } catch (_: Exception) {}
                                     }
                                 }
                             }
@@ -237,6 +372,7 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
                 }
             }
         } catch (e: Exception) {
+            statusView?.visibility = View.VISIBLE
             statusView?.text = "خطا: ${e.message}"
             stopListening()
         }
@@ -251,14 +387,16 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
             synchronized(stopLock) {
                 try {
                     audioRecord?.let { ar ->
-                        try { if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) ar.stop() } catch (_: Exception) {}
+                        try {
+                            if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) ar.stop()
+                        } catch (_: Exception) {}
                         try { ar.release() } catch (_: Exception) {}
                     }
                 } catch (_: Exception) {}
                 audioRecord = null
 
                 try {
-                    val finalJson = recognizer?.finalResult
+                    val finalJson = try { recognizer?.finalResult } catch (_: Exception) { null }
                     if (finalJson != null) {
                         val text = NumberNormalizer.normalize(extractText(finalJson))
                         if (text.isNotBlank()) {
@@ -270,7 +408,10 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
                 try { recognizer?.close() } catch (_: Exception) {}
                 recognizer = null
             }
-            statusView?.visibility = View.GONE
+            try {
+                statusView?.visibility = View.GONE
+                vibe(20)
+            } catch (_: Exception) {}
         }
     }
 
@@ -278,9 +419,12 @@ class VoiceInputMethodService : InputMethodService(), KeyboardView.OnKeyboardAct
         try { JSONObject(json).optString("text", "").trim() } catch (_: Exception) { "" }
 
     override fun onDestroy() {
+        try { mainHandler.removeCallbacks(longPressRunnable) } catch (_: Exception) {}
         stopListening()
         try { model?.close() } catch (_: Exception) {}
         model = null
+        try { toneGen?.release() } catch (_: Exception) {}
+        toneGen = null
         scope.cancel()
         super.onDestroy()
     }
