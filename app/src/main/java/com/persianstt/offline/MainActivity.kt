@@ -61,6 +61,8 @@ class MainActivity : AppCompatActivity() {
         private const val PREFS = "hamdel_stt"
         private const val KEY_LANG = "lang"
         private const val KEY_HIDE_INVITE = "hide_invite"
+        private const val KEY_SOUND = "key_sound"
+        private const val KEY_VIBE = "key_vibe"
         const val LANG_FA = "fa"
         const val LANG_EN = "en"
         private const val CHANNEL_URL = "https://t.me/Akademi_hamdel"
@@ -112,6 +114,18 @@ class MainActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_language -> { showLanguagePicker(); true }
+            R.id.action_sound -> {
+                val on = !(prefs.getBoolean(KEY_SOUND, true))
+                prefs.edit().putBoolean(KEY_SOUND, on).apply()
+                Toast.makeText(this, if (on) R.string.sound_on else R.string.sound_off, Toast.LENGTH_SHORT).show()
+                true
+            }
+            R.id.action_vibe -> {
+                val on = !(prefs.getBoolean(KEY_VIBE, true))
+                prefs.edit().putBoolean(KEY_VIBE, on).apply()
+                Toast.makeText(this, if (on) R.string.vibe_on else R.string.vibe_off, Toast.LENGTH_SHORT).show()
+                true
+            }
             R.id.action_help -> { showHelp(); true }
             R.id.action_about -> { showAbout(); true }
             R.id.action_channel -> { openChannel(); true }
@@ -409,20 +423,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopListening() {
-        // First signal the loop to exit
         isListening = false
         try { listenJob?.cancel() } catch (_: Exception) {}
         listenJob = null
 
-        // Give the IO loop a moment to exit the while, then clean resources under lock
         mainHandler.post {
             synchronized(stopLock) {
                 try {
                     audioRecord?.let { ar ->
                         try {
-                            if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                                ar.stop()
-                            }
+                            if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) ar.stop()
                         } catch (_: Exception) {}
                         try { ar.release() } catch (_: Exception) {}
                     }
@@ -430,15 +440,13 @@ class MainActivity : AppCompatActivity() {
                 audioRecord = null
 
                 try {
-                    val finalJson = recognizer?.finalResult
+                    val finalJson = try { recognizer?.finalResult } catch (_: Exception) { null }
                     if (finalJson != null) {
                         val text = NumberNormalizer.normalize(extractText(finalJson))
                         if (text.isNotBlank() && !isFinishing && !isDestroyed) {
                             if (finalText.isNotEmpty()) finalText.append(" ")
                             finalText.append(text)
-                            try {
-                                binding.resultText.setText(finalText.toString())
-                            } catch (_: Exception) {}
+                            try { binding.resultText.setText(finalText.toString()) } catch (_: Exception) {}
                         }
                     }
                 } catch (_: Exception) {}
