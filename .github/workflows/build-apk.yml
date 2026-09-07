@@ -45,9 +45,15 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.0
-          name: "v1.2.0 Offline STT Hamdel - Akademi_hamdel"
-          body: "Persian+English offline STT. Help, About (Hamdel managers), invite dialog, channel t.me/Akademi_hamdel"
+          tag_name: v1.3.0
+          name: "v1.3.0 - Fix crashes + Number to digits"
+          body: |
+            ## تغییرات نسخه ۱.۳.۰
+            - رفع کرش هنگام دادن اجازه میکروفون (اولین بار)
+            - رفع مشکل دکمه توقف و خروج ناگهانی از برنامه
+            - تبدیل اعداد گفتاری به رقم (فارسی و انگلیسی) بدون فاصله بین رقم‌ها
+            - پایداری بیشتر lifecycle و AudioRecord
+            - کانال: https://t.me/Akademi_hamdel
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
