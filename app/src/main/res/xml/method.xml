@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <input-method xmlns:android="http://schemas.android.com/apk/res/android"
     android:settingsActivity="com.persianstt.offline.MainActivity"
-    android:supportsSwitchingToNextInputMethod="true">
+    android:supportsSwitchingToNextInputMethod="true"
+    android:isDefault="false">
     <subtype
         android:label="@string/ime_subtype_label"
-        android:imeSubtypeMode="voice"
+        android:imeSubtypeMode="keyboard"
         android:imeSubtypeLocale="fa_IR"
-        android:languageTag="fa" />
+        android:languageTag="fa"
+        android:imeSubtypeExtraValue="KeyboardLayoutSet=qwerty" />
     <subtype
         android:label="@string/ime_subtype_label_en"
-        android:imeSubtypeMode="voice"
+        android:imeSubtypeMode="keyboard"
         android:imeSubtypeLocale="en_US"
-        android:languageTag="en" />
+        android:languageTag="en"
+        android:imeSubtypeExtraValue="KeyboardLayoutSet=qwerty" />
 </input-method>
