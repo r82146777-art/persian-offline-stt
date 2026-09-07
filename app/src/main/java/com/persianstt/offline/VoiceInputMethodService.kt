@@ -7,18 +7,17 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.TypedValue
-import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.LinearLayout
@@ -40,6 +39,13 @@ import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
 
+/**
+ * کیبورد کامل + تایپ صوتی آفلاین
+ * - تک‌ضربه برای همه کلیدها (مناسب صفحه‌خوان)
+ * - فشار طولانی روی فاصله = شروع صوت
+ * - MIC = شروع/توقف صوت
+ * - صدای بوق هنگام شروع و توقف صوت
+ */
 class VoiceInputMethodService : InputMethodService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -62,12 +68,13 @@ class VoiceInputMethodService : InputMethodService() {
     private var isShift = false
     private var prefs: SharedPreferences? = null
     private var vibrator: Vibrator? = null
+    private var toneGen: ToneGenerator? = null
 
     companion object {
         private const val SAMPLE_RATE = 16000
         private const val PREFS = "hamdel_stt"
         private const val KEY_VIBE = "key_vibe"
-        private const val LONG_PRESS_MS = 450L
+        private const val KEY_SOUND = "key_sound"
 
         private val FA_ROWS = listOf(
             listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج", "چ"),
@@ -92,6 +99,11 @@ class VoiceInputMethodService : InputMethodService() {
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         @Suppress("DEPRECATION")
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        try {
+            toneGen = ToneGenerator(AudioManager.STREAM_SYSTEM, 70)
+        } catch (_: Exception) {
+            toneGen = null
+        }
     }
 
     override fun onCreateInputView(): View {
@@ -148,7 +160,6 @@ class VoiceInputMethodService : InputMethodService() {
             }
         }
 
-        // Bottom row: 123 | MIC | ،/. | SPACE | EN/FA | ↵
         row4?.addView(makeKey(if (isSymbols) "ABC" else "123", weight = 1.2f))
         row4?.addView(makeKey("MIC", weight = 1.2f))
         if (currentIsFa && !isSymbols) {
@@ -167,7 +178,17 @@ class VoiceInputMethodService : InputMethodService() {
         val lp = LinearLayout.LayoutParams(0, dp(48), weight)
         lp.setMargins(dp(2), dp(2), dp(2), dp(2))
         btn.layoutParams = lp
-        btn.text = label
+        btn.text = when (label) {
+            "SPACE" -> if (currentIsFa) "فاصله" else "space"
+            else -> label
+        }
+        btn.contentDescription = when (label) {
+            "SPACE" -> "فاصله. فشار طولانی برای تایپ صوتی"
+            "MIC" -> "میکروفون تایپ صوتی"
+            "⌫" -> "پاک کردن"
+            "↵" -> "خط جدید"
+            else -> label
+        }
         btn.setTextColor(Color.WHITE)
         btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (label.length > 2) 11f else 16f)
         btn.setBackgroundColor(Color.parseColor("#333333"))
@@ -175,31 +196,20 @@ class VoiceInputMethodService : InputMethodService() {
         btn.minWidth = 0
         btn.minimumWidth = 0
         btn.isAllCaps = false
+        // تک‌ضربه استاندارد — مناسب TalkBack / صفحه‌خوان
+        btn.isClickable = true
+        btn.isFocusable = true
 
         if (label == "SPACE") {
-            var longTriggered = false
-            val longRunnable = Runnable {
-                longTriggered = true
-                if (!isListening) startListening()
+            // تک‌ضربه = فاصله | فشار طولانی = صوت
+            btn.setOnClickListener {
+                currentInputConnection?.commitText(" ", 1)
+                vibe(15)
+                playKeySound()
             }
-            btn.setOnTouchListener { v, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        longTriggered = false
-                        mainHandler.postDelayed(longRunnable, LONG_PRESS_MS)
-                        true
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        mainHandler.removeCallbacks(longRunnable)
-                        if (!longTriggered) {
-                            currentInputConnection?.commitText(" ", 1)
-                            vibe(15)
-                        }
-                        v.performClick()
-                        true
-                    }
-                    else -> false
-                }
+            btn.setOnLongClickListener {
+                if (isListening) stopListening() else startListening()
+                true
             }
         } else {
             btn.setOnClickListener { onKeyTap(label) }
@@ -210,6 +220,7 @@ class VoiceInputMethodService : InputMethodService() {
     private fun onKeyTap(label: String) {
         val ic = currentInputConnection ?: return
         vibe(15)
+        playKeySound()
         when (label) {
             "⌫" -> ic.deleteSurroundingText(1, 0)
             "⇧" -> isShift = !isShift
@@ -255,6 +266,28 @@ class VoiceInputMethodService : InputMethodService() {
                 @Suppress("DEPRECATION")
                 vibrator?.vibrate(ms)
             }
+        } catch (_: Exception) {}
+    }
+
+    private fun playKeySound() {
+        if (prefs?.getBoolean(KEY_SOUND, true) != true) return
+        try {
+            toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 20)
+        } catch (_: Exception) {}
+    }
+
+    private fun playVoiceStartSound() {
+        if (prefs?.getBoolean(KEY_SOUND, true) != true) return
+        try {
+            // صدای شروع صوت (شبیه گوگل)
+            toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 150)
+        } catch (_: Exception) {}
+    }
+
+    private fun playVoiceStopSound() {
+        if (prefs?.getBoolean(KEY_SOUND, true) != true) return
+        try {
+            toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 100)
         } catch (_: Exception) {}
     }
 
@@ -328,9 +361,10 @@ class VoiceInputMethodService : InputMethodService() {
                 audioRecord = ar
                 isListening = true
             }
+            playVoiceStartSound()
             vibe(40)
             statusView?.visibility = View.VISIBLE
-            statusView?.text = "در حال شنیدن… برای توقف MIC را بزنید"
+            statusView?.text = "در حال شنیدن… برای توقف MIC یا فشار طولانی فاصله را بزنید"
 
             listenJob = scope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(4096)
@@ -389,6 +423,7 @@ class VoiceInputMethodService : InputMethodService() {
                 recognizer = null
             }
             try {
+                playVoiceStopSound()
                 statusView?.visibility = View.GONE
                 vibe(20)
             } catch (_: Exception) {}
@@ -402,6 +437,8 @@ class VoiceInputMethodService : InputMethodService() {
         stopListening()
         try { model?.close() } catch (_: Exception) {}
         model = null
+        try { toneGen?.release() } catch (_: Exception) {}
+        toneGen = null
         scope.cancel()
         super.onDestroy()
     }
