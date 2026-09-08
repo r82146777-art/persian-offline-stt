@@ -3,7 +3,7 @@
     <string name="app_name">آفلاین تایپ</string>
     <string name="status_ready">آماده — دکمه میکروفون را بزنید</string>
     <string name="status_listening">در حال شنیدن… صحبت کنید</string>
-    <string name="status_downloading">در حال دانلود مدل Whisper…</string>
+    <string name="status_downloading">در حال دانلود مدل‌های Vosk…</string>
     <string name="status_extracting">در حال آماده‌سازی مدل…</string>
     <string name="status_loading">در حال بارگذاری مدل…</string>
     <string name="status_error">خطا</string>
@@ -15,7 +15,7 @@
     <string name="copied">کپی شد</string>
     <string name="need_mic">مجوز میکروفون لازم است</string>
     <string name="offline_note">بعد از دانلود مدل، کاملاً آفلاین — بدون گوگل</string>
-    <string name="model_info">موتور: Whisper آفلاین + کیبورد کامل | گروه تکنولوژی همدل</string>
+    <string name="model_info">موتور: Vosk آفلاین فارسی+انگلیسی + کیبورد کامل | گروه تکنولوژی همدل</string>
     <string name="menu_language">انتخاب زبان تشخیص</string>
     <string name="menu_sound">صدای کلید (روشن/خاموش)</string>
     <string name="menu_vibe">ویبره کلید (روشن/خاموش)</string>
@@ -31,9 +31,9 @@
     <string name="vibe_on">ویبره روشن شد</string>
     <string name="vibe_off">ویبره خاموش شد</string>
     <string name="help_title">راهنما</string>
-    <string name="help_body">نحوه استفاده از کیبورد:\n\n۱. مدل را از این برنامه دانلود کنید.\n\n۲. تنظیمات گوشی → زبان و ورودی → کیبوردها → «آفلاین تایپ» را روشن کنید.\n\n۳. در هر برنامه این کیبورد را انتخاب کنید.\n\n۴. تایپ عادی با کلیدها.\n\n۵. تایپ صوتی: فشار طولانی روی «فاصله» یا ضربه روی دکمه 🎤.\n   صدای کوتاه و ویبره یعنی فعال شد.\n   برای توقف دوباره 🎤 را بزنید.\n\n۶. دکمه 123 برای اعداد و علائم، FA/EN برای تعویض زبان.\n\n۷. از منوی برنامه می‌توانید صدای کلید و ویبره را خاموش/روشن کنید.\n\nنکته: محیط ساکت کیفیت تشخیص را بهتر می‌کند.</string>
+    <string name="help_body">نحوه استفاده از کیبورد:\n\n۱. مدل را از این برنامه دانلود کنید.\n\n۲. تنظیمات گوشی → زبان و ورودی → کیبوردها → «آفلاین تایپ» را روشن کنید.\n\n۳. در هر برنامه این کیبورد را انتخاب کنید (فقط یک گزینه می‌آید).\n\n۴. تایپ عادی با کلیدها (تک‌ضربه).\n\n۵. تایپ صوتی: فشار طولانی روی «فاصله» یا ضربه روی دکمه 🎤.\n   صدای کوتاه و ویبره یعنی فعال شد.\n   برای توقف دوباره 🎤 یا فشار طولانی فاصله.\n\n۶. دکمه 123 برای اعداد و علائم، FA/EN برای تعویض زبان.\n\n۷. از منوی برنامه می‌توانید صدای کلید و ویبره را خاموش/روشن کنید.\n\nنکته: محیط ساکت کیفیت تشخیص را بهتر می‌کند. موتور فقط فارسی و انگلیسی را تشخیص می‌دهد.</string>
     <string name="about_title">درباره ما</string>
-    <string name="about_body">آفلاین تایپ\nنسخه ۱.۸.۰\n\nگروه تکنولوژی همدل\nمدیران: رضا ایمان‌زاده و امیرحسین بابایی\n\nکیبورد کامل فارسی/انگلیسی + تایپ صوتی آفلاین.\n\nکانال آکادمی همدل:\nhttps://t.me/Akademi_hamdel</string>
+    <string name="about_body">آفلاین تایپ\nنسخه ۲.۱.۰\n\nگروه تکنولوژی همدل\nمدیران: رضا ایمان‌زاده و امیرحسین بابایی\n\nکیبورد کامل فارسی/انگلیسی + تایپ صوتی آفلاین (Vosk).\n\nکانال آکادمی همدل:\nhttps://t.me/Akademi_hamdel</string>
     <string name="btn_copy_link">کپی لینک کانال</string>
     <string name="link_copied">لینک کانال کپی شد</string>
     <string name="invite_title">دعوت به کانال آکادمی همدل</string>
