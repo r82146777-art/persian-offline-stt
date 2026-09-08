@@ -56,14 +56,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.2.0
-          name: "v2.2.0 - True single-tap + hybrid Vosk/Whisper"
+          tag_name: v2.3.0
+          name: "v2.3.0 - Whisper base engine (higher accuracy)"
           body: |
-            ## نسخه ۲.۲.۰
-            * تک‌ضربه واقعی با OnClickListener (دیگر نیاز به فشار طولانی برای حروف نیست)
-            * فشار طولانی فقط روی فاصله = تایپ صوتی
-            * تشخیص: Vosk اصلی + Whisper پشتیبان با زبان اجباری (بدون چینی/ژاپنی)
-            * فیلتر نهایی حروف عجیب
+            ## نسخه ۲.۳.۰
+            * موتور اصلی: Whisper **base** (دقت خیلی بالاتر از tiny/Vosk small)
+            * زبان همیشه اجباری fa یا en (بدون چینی/ژاپنی)
+            * Vosk فقط پشتیبان
+            * تک‌ضربه کیبورد حفظ شده
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
