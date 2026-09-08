@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
                     currentLang = selected
                     prefs.edit().putString(KEY_LANG, selected).apply()
                     updateLangBadge()
-                    VoskEngine.release()
+                    WhisperEngine.release()
                     Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
                     prepareModel()
                 }
@@ -189,20 +189,20 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود مدل‌های Vosk فارسی و انگلیسی…"
+                binding.status.text = "دانلود مدل Whisper base (دقت بالا)…"
                 withContext(Dispatchers.IO) {
-                    VoskEngine.ensureModels(this@MainActivity) { pct ->
+                    WhisperEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
-                                binding.status.text = "دانلود Vosk $pct%"
+                                binding.status.text = "دانلود Whisper base $pct%"
                             }
                         }
                     }
-                    VoskEngine.load(this@MainActivity, currentLang)
+                    WhisperEngine.load(this@MainActivity, currentLang)
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "آماده — موتور Vosk آفلاین (فا/انگلیسی)"
+                binding.status.text = "آماده — موتور Whisper base آفلاین"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = true
             } catch (e: Exception) {
@@ -216,7 +216,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!VoskEngine.isAnyReady(this)) {
+        if (!WhisperEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -272,7 +272,7 @@ class MainActivity : AppCompatActivity() {
 
             if (!isFinishing && !isDestroyed) {
                 binding.micButton.text = getString(R.string.btn_mic)
-                binding.status.text = "در حال تشخیص Vosk…"
+                binding.status.text = "در حال تشخیص…"
             }
 
             val chunks = pcmChunks.toList()
@@ -285,9 +285,8 @@ class MainActivity : AppCompatActivity() {
                     System.arraycopy(c, 0, pcm, o, c.size)
                     o += c.size
                 }
-                // Ensure correct model loaded for selected language
-                VoskEngine.load(this@MainActivity, currentLang)
-                val text = if (pcm.isNotEmpty()) VoskEngine.transcribe(pcm, SAMPLE_RATE) else ""
+                WhisperEngine.load(this@MainActivity, currentLang)
+                val text = if (pcm.isNotEmpty()) WhisperEngine.transcribe(pcm, SAMPLE_RATE) else ""
                 withContext(Dispatchers.Main) {
                     if (isFinishing || isDestroyed) return@withContext
                     if (text.isNotBlank()) {
@@ -296,7 +295,7 @@ class MainActivity : AppCompatActivity() {
                         binding.resultText.setText(finalText.toString())
                         binding.resultText.setSelection(binding.resultText.text.length)
                     }
-                    binding.status.text = "آماده — موتور Vosk آفلاین (فا/انگلیسی)"
+                    binding.status.text = "آماده — موتور Whisper base آفلاین"
                 }
             }
         }
@@ -328,7 +327,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopListening()
-        VoskEngine.release()
+        WhisperEngine.release()
         super.onDestroy()
     }
 }
