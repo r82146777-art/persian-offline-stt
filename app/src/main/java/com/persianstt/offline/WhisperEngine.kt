@@ -12,27 +12,27 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Offline Whisper tiny (int8) via sherpa-onnx.
- * Language is ALWAYS forced to "fa" or "en" (never auto) to prevent
- * Chinese / Japanese / other-language hallucinations.
+ * Offline Whisper **base** (int8) via sherpa-onnx.
+ * Much more accurate than tiny for Persian/English.
+ * Language is ALWAYS forced to "fa" or "en" (never auto)
+ * to prevent Chinese / Japanese hallucinations.
  */
 object WhisperEngine {
 
-    private const val MODEL_DIR = "whisper-tiny"
-    private const val ENC = "tiny-encoder.int8.onnx"
-    private const val DEC = "tiny-decoder.int8.onnx"
-    private const val TOK = "tiny-tokens.txt"
+    private const val MODEL_DIR = "whisper-base"
+    private const val ENC = "base-encoder.int8.onnx"
+    private const val DEC = "base-decoder.int8.onnx"
+    private const val TOK = "base-tokens.txt"
 
     private val FILES = mapOf(
-        ENC to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-encoder.int8.onnx",
-        DEC to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-decoder.int8.onnx",
-        TOK to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-tokens.txt"
+        ENC to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-encoder.int8.onnx",
+        DEC to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-decoder.int8.onnx",
+        TOK to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-tokens.txt"
     )
 
     @Volatile private var recognizer: OfflineRecognizer? = null
     @Volatile private var loadedLang: String = ""
 
-    // CJK / Japanese / Korean / Hangul / fullwidth → reject
     private val BAD_SCRIPT = Regex(
         "[\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff" +
             "\\uac00-\\ud7af\\uff00-\\uffef\\u3000-\\u303f]"
@@ -70,7 +70,7 @@ object WhisperEngine {
         val url = URL(urlStr)
         val conn = (url.openConnection() as HttpURLConnection).apply {
             connectTimeout = 30_000
-            readTimeout = 60_000
+            readTimeout = 300_000
             instanceFollowRedirects = true
         }
         conn.connect()
@@ -101,19 +101,13 @@ object WhisperEngine {
         }
     }
 
-    /**
-     * Load (or reload) recognizer with a forced language.
-     * languageHint must be "fa" or "en". Anything else defaults to "fa".
-     */
     @Synchronized
     fun load(context: Context, languageHint: String = "fa"): Boolean {
         val lang = when (languageHint.lowercase()) {
             "en", "english" -> "en"
             else -> "fa"
         }
-        // Already loaded with same language → reuse
         if (recognizer != null && loadedLang == lang) return true
-        // Language changed → rebuild
         release()
         if (!isReady(context)) return false
         val dir = modelDir(context)
@@ -122,7 +116,7 @@ object WhisperEngine {
                 whisper = OfflineWhisperModelConfig(
                     encoder = File(dir, ENC).absolutePath,
                     decoder = File(dir, DEC).absolutePath,
-                    language = lang,          // ALWAYS forced
+                    language = lang,
                     task = "transcribe",
                     tailPaddings = 1000
                 ),
@@ -144,15 +138,10 @@ object WhisperEngine {
         loadedLang = ""
     }
 
-    /**
-     * Decode 16-bit mono PCM @ 16 kHz.
-     * Cleans hallucinations: CJK scripts, runaway repetition.
-     */
     @Synchronized
     fun transcribe(pcm16: ShortArray, sampleRate: Int = 16000): String {
         val r = recognizer ?: return ""
         if (pcm16.isEmpty()) return ""
-        // Too short (< 0.3 s) → ignore (avoids garbage)
         if (pcm16.size < sampleRate / 3) return ""
 
         val floats = FloatArray(pcm16.size) { i -> pcm16[i] / 32768.0f }
@@ -169,22 +158,14 @@ object WhisperEngine {
         }
     }
 
-    /** Remove wrong-script output and collapse repetition loops. */
     private fun cleanResult(text: String): String {
         if (text.isBlank()) return ""
-
-        // Reject if contains Chinese / Japanese / Korean characters
         if (BAD_SCRIPT.containsMatchIn(text)) return ""
 
         var t = text
-
-        // Collapse "word word word …" (same token 3+ times)
         t = t.replace(Regex("(\\S+)(?:\\s+\\1){2,}"), "$1")
-
-        // Collapse character-level loops: "هههههه" → "هه"
         t = t.replace(Regex("(.)\\1{4,}"), "$1$1")
 
-        // Extra safety: if more than 60% of tokens are identical, keep only one
         val tokens = t.split(Regex("\\s+")).filter { it.isNotBlank() }
         if (tokens.size >= 4) {
             val mostCommon = tokens.groupingBy { it }.eachCount().maxByOrNull { it.value }
