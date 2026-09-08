@@ -19,7 +19,6 @@ import android.view.inputmethod.InputConnection
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,15 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.CopyOnWriteArrayList
 
-/**
- * Full Persian offline keyboard (IME) + voice typing.
- * - RTL layout
- * - Single-tap keys (works with TalkBack)
- * - Long-press Space = start/stop voice typing
- * - Numbers / symbols layers
- * - Sound + vibration (toggleable)
- * - Uses WhisperEngine (forced fa/en only) primary, Vosk fallback
- */
+/** Vosk FA primary voice typing IME — RTL single-tap keyboard. */
 class VoiceInputMethodService : InputMethodService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -61,7 +52,6 @@ class VoiceInputMethodService : InputMethodService() {
         private const val LONG_PRESS_MS = 450L
     }
 
-    // Persian letters (RTL visual order left-to-right in code = right-to-left on screen)
     private val ROW1 = listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج", "چ")
     private val ROW2 = listOf("ش", "س", "ی", "ب", "ل", "ا", "ت", "ن", "م", "ک", "گ")
     private val ROW3 = listOf("ظ", "ط", "ز", "ر", "ذ", "د", "پ", "و")
@@ -72,9 +62,7 @@ class VoiceInputMethodService : InputMethodService() {
 
     override fun onCreate() {
         super.onCreate()
-        try {
-            toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
-        } catch (_: Exception) {}
+        try { toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 60) } catch (_: Exception) {}
         vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
     }
 
@@ -86,7 +74,6 @@ class VoiceInputMethodService : InputMethodService() {
             setPadding(4, 8, 4, 8)
         }
         keyboardRoot = root
-
         statusView = TextView(this).apply {
             text = "آفلاین تایپ — فشار طولانی فاصله = صوت"
             setTextColor(0xFFAAAAAA.toInt())
@@ -95,17 +82,13 @@ class VoiceInputMethodService : InputMethodService() {
             gravity = android.view.Gravity.CENTER
         }
         root.addView(statusView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
-
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         buildKeyboard(root)
         return root
     }
 
     private fun buildKeyboard(root: LinearLayout) {
-        // Remove old key rows (keep status)
         while (root.childCount > 1) root.removeViewAt(1)
-
         when (currentLayer) {
             LAYER_LETTERS -> {
                 addKeyRow(root, ROW1)
@@ -117,7 +100,7 @@ class VoiceInputMethodService : InputMethodService() {
                 addKeyRow(root, listOf(".", ",", "؟", "!", ":", ";", "ـ", "٪", "×", "÷"))
                 addKeyRow(root, listOf("(", ")", "[", "]", "{", "}", "<", ">"))
             }
-            LAYER_SYMBOLS -> {
+            else -> {
                 addKeyRow(root, ROW_SYM1)
                 addKeyRow(root, ROW_SYM2)
                 addKeyRow(root, ROW_SYM3)
@@ -126,17 +109,12 @@ class VoiceInputMethodService : InputMethodService() {
         addBottomRow(root)
     }
 
-    private fun addKeyRow(
-        parent: LinearLayout,
-        keys: List<String>,
-        includeShift: Boolean = false
-    ) {
+    private fun addKeyRow(parent: LinearLayout, keys: List<String>, includeShift: Boolean = false) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { setMargins(2, 2, 2, 2) }
         }
         if (includeShift) {
@@ -145,12 +123,8 @@ class VoiceInputMethodService : InputMethodService() {
                 buildKeyboard(parent)
             })
         }
-        keys.forEach { label ->
-            row.addView(makeKey(label, 1f) { commitText(label) })
-        }
-        if (includeShift) {
-            row.addView(makeKey("⌫", 1.2f) { deleteLast() })
-        }
+        keys.forEach { label -> row.addView(makeKey(label, 1f) { commitText(label) }) }
+        if (includeShift) row.addView(makeKey("⌫", 1.2f) { deleteLast() })
         parent.addView(row)
     }
 
@@ -159,12 +133,9 @@ class VoiceInputMethodService : InputMethodService() {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { setMargins(2, 4, 2, 2) }
         }
-
-        // Layer switch
         val layerLabel = when (currentLayer) {
             LAYER_LETTERS -> "۱۲۳"
             LAYER_NUMBERS -> "#+="
@@ -174,11 +145,8 @@ class VoiceInputMethodService : InputMethodService() {
             currentLayer = (currentLayer + 1) % 3
             buildKeyboard(parent)
         })
-
         row.addView(makeKey(",", 0.8f) { commitText("،") })
         row.addView(makeKey(".", 0.8f) { commitText(".") })
-
-        // Space with long-press for voice
         val space = makeKey("فاصله", 3.5f) { commitText(" ") }
         space.setOnTouchListener { v, event ->
             when (event.action) {
@@ -191,7 +159,6 @@ class VoiceInputMethodService : InputMethodService() {
                     mainHandler.removeCallbacks(longPressRunnable)
                     v.isPressed = false
                     if (event.eventTime - event.downTime < LONG_PRESS_MS) {
-                        // short tap = space
                         commitText(" ")
                         playClick()
                     }
@@ -200,16 +167,13 @@ class VoiceInputMethodService : InputMethodService() {
                 else -> false
             }
         }
-        // Override click to avoid double
         space.setOnClickListener(null)
         row.addView(space)
-
         row.addView(makeKey("↵", 1.3f) {
             val ic = currentInputConnection
             ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
         })
-
         parent.addView(row)
     }
 
@@ -224,15 +188,8 @@ class VoiceInputMethodService : InputMethodService() {
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xFF2D2D2D.toInt())
             isAllCaps = false
-            layoutParams = LinearLayout.LayoutParams(0, 96, weight).apply {
-                setMargins(3, 3, 3, 3)
-            }
-            // Single-tap that works for TalkBack and sighted users
-            setOnClickListener {
-                onTap()
-                playClick()
-            }
-            // Accessibility
+            layoutParams = LinearLayout.LayoutParams(0, 96, weight).apply { setMargins(3, 3, 3, 3) }
+            setOnClickListener { onTap(); playClick() }
             contentDescription = when (label) {
                 "فاصله" -> "فاصله — فشار طولانی برای تایپ صوتی"
                 "⌫" -> "پاک کردن"
@@ -244,7 +201,7 @@ class VoiceInputMethodService : InputMethodService() {
     }
 
     private fun commitText(text: String) {
-        val ic: InputConnection = currentInputConnection ?: return
+        val ic = currentInputConnection ?: return
         val out = if (isShift && text.length == 1) text.uppercase() else text
         ic.commitText(out, 1)
         if (isShift) {
@@ -279,34 +236,23 @@ class VoiceInputMethodService : InputMethodService() {
         isListening = true
         pcmChunks.clear()
         statusView?.text = "در حال گوش دادن… (دوباره فشار طولانی برای توقف)"
-        try {
-            toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 80)
-        } catch (_: Exception) {}
-
+        try { toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         val minBuf = AudioRecord.getMinBufferSize(
-            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
-        )
+            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            minBuf * 2
-        )
+            MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf * 2)
         if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
             statusView?.text = "خطا در میکروفون"
             isListening = false
             return
         }
         audioRecord?.startRecording()
-
         listenJob = scope.launch(Dispatchers.IO) {
             val buf = ShortArray(SAMPLE_RATE / 5)
             while (isActive && isListening) {
                 val n = audioRecord?.read(buf, 0, buf.size) ?: -1
-                if (n > 0) {
-                    pcmChunks.add(buf.copyOf(n))
-                }
+                if (n > 0) pcmChunks.add(buf.copyOf(n))
             }
         }
     }
@@ -316,34 +262,25 @@ class VoiceInputMethodService : InputMethodService() {
             if (!isListening) return
             isListening = false
             listenJob?.cancel()
-            try {
-                audioRecord?.stop()
-                audioRecord?.release()
-            } catch (_: Exception) {}
+            try { audioRecord?.stop(); audioRecord?.release() } catch (_: Exception) {}
             audioRecord = null
         }
-        try {
-            toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 60)
-        } catch (_: Exception) {}
+        try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 60) } catch (_: Exception) {}
         statusView?.text = "در حال تشخیص…"
-
         scope.launch(Dispatchers.IO) {
             val all = pcmChunks.flatMap { it.toList() }.toShortArray()
             pcmChunks.clear()
             var text = ""
             try {
-                // Primary: Whisper base forced to fa
-                if (WhisperEngine.isReady(this@VoiceInputMethodService)) {
-                    WhisperEngine.load(this@VoiceInputMethodService, "fa")
-                    text = WhisperEngine.transcribe(all, SAMPLE_RATE)
-                }
-                // Fallback Vosk
-                if (text.length < 2 && VoskEngine.isAnyReady(this@VoiceInputMethodService)) {
+                if (VoskEngine.isReady(this@VoiceInputMethodService, "fa")) {
                     VoskEngine.load(this@VoiceInputMethodService, "fa")
                     text = VoskEngine.transcribe(all, SAMPLE_RATE)
                 }
+                if (text.length < 2 && WhisperEngine.isReady(this@VoiceInputMethodService)) {
+                    WhisperEngine.load(this@VoiceInputMethodService, "fa")
+                    text = WhisperEngine.transcribe(all, SAMPLE_RATE)
+                }
             } catch (_: Exception) {}
-
             withContext(Dispatchers.Main) {
                 if (text.isNotBlank()) {
                     currentInputConnection?.commitText(text + " ", 1)
@@ -360,13 +297,12 @@ class VoiceInputMethodService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        // Ensure models are ready in background
         scope.launch(Dispatchers.IO) {
             try {
-                if (!WhisperEngine.isReady(this@VoiceInputMethodService)) {
-                    WhisperEngine.ensureModel(this@VoiceInputMethodService)
+                if (!VoskEngine.isReady(this@VoiceInputMethodService, "fa")) {
+                    VoskEngine.ensureModels(this@VoiceInputMethodService)
                 }
-                WhisperEngine.load(this@VoiceInputMethodService, "fa")
+                VoskEngine.load(this@VoiceInputMethodService, "fa")
             } catch (_: Exception) {}
         }
     }
