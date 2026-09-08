@@ -31,16 +31,21 @@
     <string name="vibe_on">ویبره روشن شد</string>
     <string name="vibe_off">ویبره خاموش شد</string>
     <string name="help_title">راهنما</string>
-    <string name="help_body">نحوه استفاده از کیبورد:\n\n۱. مدل را از این برنامه دانلود کنید.\n\n۲. تنظیمات گوشی → زبان و ورودی → کیبوردها → «آفلاین تایپ» را روشن کنید.\n\n۳. در هر برنامه این کیبورد را انتخاب کنید (فقط یک گزینه می‌آید).\n\n۴. تایپ عادی با کلیدها (تک‌ضربه).\n\n۵. تایپ صوتی: فشار طولانی روی «فاصله» یا ضربه روی دکمه 🎤.\n   صدای کوتاه و ویبره یعنی فعال شد.\n   برای توقف دوباره 🎤 یا فشار طولانی فاصله.\n\n۶. دکمه 123 برای اعداد و علائم، FA/EN برای تعویض زبان.\n\n۷. از منوی برنامه می‌توانید صدای کلید و ویبره را خاموش/روشن کنید.\n\nنکته: محیط ساکت کیفیت تشخیص را بهتر می‌کند. موتور فقط فارسی و انگلیسی را تشخیص می‌دهد.</string>
+    <string name="help_body">نحوه استفاده:\n۱. مدل را دانلود کنید.\n۲. کیبورد «آفلاین تایپ» را در تنظیمات فعال کنید.\n۳. فشار طولانی فاصله = تایپ صوتی.\n۴. فقط فارسی و انگلیسی تشخیص داده می‌شود.</string>
+    <string name="help_msg">نحوه استفاده:\n۱. مدل را دانلود کنید.\n۲. کیبورد «آفلاین تایپ» را در تنظیمات فعال کنید.\n۳. فشار طولانی فاصله = تایپ صوتی.\n۴. فقط فارسی و انگلیسی تشخیص داده می‌شود.</string>
     <string name="about_title">درباره ما</string>
-    <string name="about_body">آفلاین تایپ\nنسخه ۲.۶.۰\n\nگروه تکنولوژی همدل\nمدیران: رضا ایمان‌زاده و امیرحسین بابایی\n\nکیبورد کامل فارسی/انگلیسی + تایپ صوتی آفلاین.\n\nکانال آکادمی همدل:\nhttps://t.me/Akademi_hamdel</string>
+    <string name="about_body">آفلاین تایپ نسخه ۲.۶.۰\nگروه تکنولوژی همدل\nکیبورد + تایپ صوتی آفلاین (Whisper + Vosk)\nhttps://t.me/Akademi_hamdel</string>
+    <string name="about_msg">آفلاین تایپ نسخه ۲.۶.۰\nگروه تکنولوژی همدل\nکیبورد + تایپ صوتی آفلاین (Whisper + Vosk)\nhttps://t.me/Akademi_hamdel</string>
     <string name="btn_copy_link">کپی لینک کانال</string>
     <string name="link_copied">لینک کانال کپی شد</string>
     <string name="invite_title">دعوت به کانال آکادمی همدل</string>
-    <string name="invite_body">برای آموزش‌ها، به‌روزرسانی‌ها و ابزارهای جدید گروه تکنولوژی همدل، به کانال آکادمی همدل بپیوندید.\n\nhttps://t.me/Akademi_hamdel</string>
+    <string name="invite_body">برای آموزش‌ها و ابزارهای جدید به کانال آکادمی همدل بپیوندید.\nhttps://t.me/Akademi_hamdel</string>
+    <string name="invite_msg">برای آموزش‌ها و ابزارهای جدید به کانال آکادمی همدل بپیوندید.\nhttps://t.me/Akademi_hamdel</string>
     <string name="invite_dont_show">دیگر بهم نشون نده</string>
+    <string name="invite_hide">دیگر بهم نشون نده</string>
     <string name="invite_cancel">لغو</string>
     <string name="invite_join">عضو می‌شم</string>
+    <string name="invite_ok">عضو می‌شم</string>
     <string name="channel_url">https://t.me/Akademi_hamdel</string>
     <string name="ok">باشه</string>
     <string name="ime_name">آفلاین تایپ</string>
