@@ -17,13 +17,10 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.view.Gravity
 import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -39,10 +36,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Full offline Persian/English IME.
- * - RTL layout
- * - Single-tap keys (works with TalkBack)
- * - Long-press SPACE = start/stop voice typing
- * - Vosk fa + en models only (no CJK hallucination)
+ * - Single-tap keys via normal OnClickListener (reliable on all devices + TalkBack)
+ * - Long-press SPACE only = voice typing
+ * - Vosk primary, Whisper forced-lang fallback for better accuracy
  */
 class VoiceInputMethodService : android.inputmethodservice.InputMethodService() {
 
@@ -52,9 +48,7 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
         private const val KEY_SOUND = "key_sound"
         private const val KEY_VIBE = "key_vibe"
         private const val KEY_LANG = "lang"
-        private const val LONG_PRESS_MS = 450L
 
-        // Persian letters (standard Iranian layout, right-to-left visual order)
         private val ROW1_FA = listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج", "چ")
         private val ROW2_FA = listOf("ش", "س", "ی", "ب", "ل", "ا", "ت", "ن", "م", "ک", "گ")
         private val ROW3_FA = listOf("ظ", "ط", "ز", "ر", "ذ", "د", "پ", "و", "ئ")
@@ -110,27 +104,27 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
     }
 
     override fun onCreateInputView(): View {
-        val inflater = layoutInflater
-        val v = inflater.inflate(R.layout.keyboard_view, null) as LinearLayout
+        val v = layoutInflater.inflate(R.layout.keyboard_view, null) as LinearLayout
         rootView = v
         statusView = v.findViewById(R.id.imeStatus)
         row1 = v.findViewById(R.id.row1)
         row2 = v.findViewById(R.id.row2)
         row3 = v.findViewById(R.id.row3)
         row4 = v.findViewById(R.id.row4)
-        v.layoutDirection = View.LAYOUT_DIRECTION_RTL
+        v.layoutDirection = View.LAYOUT_DIRECTION_LTR
         buildKeyboard()
         return v
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        // Never auto-start voice
         if (isListening) stopVoice()
-        // Ensure model loaded for current language
         scope.launch(Dispatchers.IO) {
             if (VoskEngine.isReady(this@VoiceInputMethodService, currentLangCode)) {
                 VoskEngine.load(this@VoiceInputMethodService, currentLangCode)
+            }
+            if (WhisperEngine.isReady(this@VoiceInputMethodService)) {
+                WhisperEngine.load(this@VoiceInputMethodService, currentLangCode)
             }
         }
     }
@@ -147,8 +141,6 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
         super.onDestroy()
     }
 
-    // -------------------- Keyboard building --------------------
-
     private fun buildKeyboard() {
         row1?.removeAllViews()
         row2?.removeAllViews()
@@ -162,19 +154,17 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
         r1.forEach { addKey(row1!!, it) }
         r2.forEach { addKey(row2!!, it) }
 
-        // Row 3: shift + letters + backspace
         addKey(row3!!, if (isSymbols) "ABC" else "⇧", weight = 1.4f, special = true)
         r3.forEach { addKey(row3!!, it) }
         addKey(row3!!, "⌫", weight = 1.4f, special = true)
 
-        // Row 4: 123 / FA-EN / , / SPACE / . / enter / mic
         addKey(row4!!, if (isSymbols) "ABC" else "123", weight = 1.3f, special = true)
         addKey(row4!!, if (isPersian) "EN" else "FA", weight = 1.2f, special = true)
-        addKey(row4!!, "،", weight = 1.0f) // Persian comma
-        addKey(row4!!, " ", weight = 3.8f, label = "فاصله", special = true) // SPACE
+        addKey(row4!!, "،", weight = 1.0f)
+        addKey(row4!!, " ", weight = 3.8f, label = "فاصله", special = true)
         addKey(row4!!, ".", weight = 1.0f)
-        addKey(row4!!, "↵", weight = 1.3f, special = true) // Enter
-        addKey(row4!!, "🎤", weight = 1.3f, special = true) // Mic
+        addKey(row4!!, "↵", weight = 1.3f, special = true)
+        addKey(row4!!, "🎤", weight = 1.3f, special = true)
     }
 
     private fun addKey(
@@ -192,6 +182,8 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
             setBackgroundColor(if (special) 0xFF2C2C2C.toInt() else 0xFF3A3A3A.toInt())
             setPadding(2, 10, 2, 10)
             isAllCaps = false
+            isClickable = true
+            isFocusable = true
             contentDescription = when (code) {
                 " " -> "فاصله. فشار طولانی برای تایپ صوتی"
                 "⌫" -> "پاک کردن"
@@ -202,41 +194,18 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
                 "EN", "FA" -> "تغییر زبان"
                 else -> code
             }
-            // Single-tap for everyone (including TalkBack): fire on ACTION_UP
-            setOnTouchListener { v, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        if (code == " ") {
-                            // Schedule long-press for voice
-                            v.tag = Runnable {
-                                startOrStopVoice()
-                            }
-                            mainHandler.postDelayed(v.tag as Runnable, LONG_PRESS_MS)
-                        }
-                        true
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        val r = v.tag as? Runnable
-                        if (r != null) {
-                            mainHandler.removeCallbacks(r)
-                            v.tag = null
-                        }
-                        if (event.action == MotionEvent.ACTION_UP) {
-                            // Only commit key if it was not a long-press
-                            if (code != " " || r != null) {
-                                // r still present means long-press did not fire
-                                onKey(code)
-                            }
-                            // if long-press already fired, r was cleared inside Runnable
-                        }
-                        true
-                    }
-                    else -> false
-                }
-            }
-            // Also keep click for accessibility fallback
+
+            // TRUE single-tap
             setOnClickListener {
-                // Already handled by touch; do nothing to avoid double
+                onKey(code)
+            }
+
+            // Long-press ONLY on space = voice
+            if (code == " ") {
+                setOnLongClickListener {
+                    startOrStopVoice()
+                    true
+                }
             }
         }
         val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, weight).apply {
@@ -250,7 +219,6 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
         val ic = currentInputConnection ?: return
         when (code) {
             "⌫" -> {
-                // Backspace
                 val selected = ic.getSelectedText(0)
                 if (selected != null && selected.isNotEmpty()) {
                     ic.commitText("", 1)
@@ -283,6 +251,9 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
                 buildKeyboard()
                 scope.launch(Dispatchers.IO) {
                     VoskEngine.load(this@VoiceInputMethodService, "en")
+                    if (WhisperEngine.isReady(this@VoiceInputMethodService)) {
+                        WhisperEngine.load(this@VoiceInputMethodService, "en")
+                    }
                 }
             }
             "FA" -> {
@@ -294,6 +265,9 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
                 buildKeyboard()
                 scope.launch(Dispatchers.IO) {
                     VoskEngine.load(this@VoiceInputMethodService, "fa")
+                    if (WhisperEngine.isReady(this@VoiceInputMethodService)) {
+                        WhisperEngine.load(this@VoiceInputMethodService, "fa")
+                    }
                 }
             }
             "🎤" -> startOrStopVoice()
@@ -309,14 +283,8 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
         }
     }
 
-    // -------------------- Voice --------------------
-
     private fun startOrStopVoice() {
-        if (isListening) {
-            stopVoice()
-        } else {
-            startVoice()
-        }
+        if (isListening) stopVoice() else startVoice()
     }
 
     private fun startVoice() {
@@ -326,14 +294,14 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
             showStatus("مجوز میکروفون لازم است — از برنامه اصلی بدهید")
             return
         }
-        if (!VoskEngine.isReady(this, currentLangCode)) {
+        if (!VoskEngine.isReady(this, currentLangCode) && !WhisperEngine.isReady(this)) {
             showStatus("ابتدا از برنامه اصلی مدل را دانلود کنید")
             return
         }
         scope.launch(Dispatchers.IO) {
-            if (!VoskEngine.load(this@VoiceInputMethodService, currentLangCode)) {
-                withContext(Dispatchers.Main) { showStatus("خطا در بارگذاری مدل") }
-                return@launch
+            VoskEngine.load(this@VoiceInputMethodService, currentLangCode)
+            if (WhisperEngine.isReady(this@VoiceInputMethodService)) {
+                WhisperEngine.load(this@VoiceInputMethodService, currentLangCode)
             }
             withContext(Dispatchers.Main) {
                 synchronized(stopLock) {
@@ -404,7 +372,7 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
                 System.arraycopy(c, 0, pcm, o, c.size)
                 o += c.size
             }
-            val text = if (pcm.isNotEmpty()) VoskEngine.transcribe(pcm, SAMPLE_RATE) else ""
+            val text = if (pcm.isNotEmpty()) recognizeBest(pcm) else ""
             withContext(Dispatchers.Main) {
                 if (text.isNotBlank()) {
                     currentInputConnection?.commitText(text + " ", 1)
@@ -414,7 +382,32 @@ class VoiceInputMethodService : android.inputmethodservice.InputMethodService() 
         }
     }
 
-    // -------------------- Feedback --------------------
+    private fun recognizeBest(pcm: ShortArray): String {
+        var text = ""
+        try {
+            if (VoskEngine.isReady(this, currentLangCode)) {
+                VoskEngine.load(this, currentLangCode)
+                text = VoskEngine.transcribe(pcm, SAMPLE_RATE)
+            }
+        } catch (_: Exception) {}
+
+        val weak = text.isBlank() || text.length < 2
+        if (weak && WhisperEngine.isReady(this)) {
+            try {
+                WhisperEngine.load(this, currentLangCode)
+                val alt = WhisperEngine.transcribe(pcm, SAMPLE_RATE)
+                if (alt.isNotBlank() && alt.length >= text.length) {
+                    text = alt
+                }
+            } catch (_: Exception) {}
+        }
+
+        text = text.replace(
+            Regex("[\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff\\uac00-\\ud7af\\uff00-\\uffef\\u3000-\\u303f]"),
+            ""
+        ).trim()
+        return NumberNormalizer.normalize(text)
+    }
 
     private fun playClick() {
         if (!prefs.getBoolean(KEY_SOUND, true)) return
