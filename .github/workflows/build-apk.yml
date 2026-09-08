@@ -56,15 +56,16 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.7.0
-          name: "v1.7.0 - Whisper offline engine"
+          tag_name: v1.8.0
+          name: "v1.8.0 - آفلاین تایپ + force fa/en"
           body: |
-            ## نسخه ۱.۷.۰ — موتور Whisper آفلاین
+            ## نسخه ۱.۸.۰ — آفلاین تایپ
 
-            - موتور Whisper tiny چندزبانه (sherpa-onnx)
-            - دقت بالاتر برای فارسی و انگلیسی
-            - دانلود مدل ~۱۰۰ مگ از داخل برنامه
-            - کیبورد تک‌ضربه + فشار طولانی فاصله برای صوت
+            - اسم برنامه: آفلاین تایپ
+            - زبان تشخیص همیشه اجباری fa یا en (دیگر چینی/ژاپنی نمی‌نویسد)
+            - فیلتر تکرار و حروف چینی/ژاپنی
+            - کیبورد تک‌ضربه
+            - فشار طولانی فاصله = تایپ صوتی
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
