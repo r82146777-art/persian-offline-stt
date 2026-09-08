@@ -56,15 +56,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.1.0
-          name: "v2.1.0 - Fixed IME + Vosk fa/en + single subtype"
+          tag_name: v2.2.0
+          name: "v2.2.0 - True single-tap + hybrid Vosk/Whisper"
           body: |
-            ## نسخه ۲.۱.۰
-            * فایل سرویس کیبورد (که خراب شده بود) کامل بازنویسی شد
-            * فقط یک subtype → دیگر دو گزینه انگلیسی/کیبورد نشان داده نمی‌شود
-            * موتور Vosk اختصاصی فارسی + انگلیسی (بدون چینی/ژاپنی)
-            * کیبورد راست‌به‌چپ + تک‌ضربه واقعی
-            * فشار طولانی فاصله = تایپ صوتی
+            ## نسخه ۲.۲.۰
+            * تک‌ضربه واقعی با OnClickListener (دیگر نیاز به فشار طولانی برای حروف نیست)
+            * فشار طولانی فقط روی فاصله = تایپ صوتی
+            * تشخیص: Vosk اصلی + Whisper پشتیبان با زبان اجباری (بدون چینی/ژاپنی)
+            * فیلتر نهایی حروف عجیب
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
