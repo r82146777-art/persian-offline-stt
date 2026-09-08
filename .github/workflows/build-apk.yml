@@ -56,15 +56,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.5.0
-          name: "v2.5.0 - Stable restore (Whisper + Vosk)"
+          tag_name: v2.5.1
+          name: "v2.5.1 - Stable (Whisper base + Vosk)"
           body: |
-            ## نسخه ۲.۵.۰ — بازگردانی پایدار
-            * فایل MainActivity که خراب شده بود کامل ترمیم شد
-            * موتور اصلی: Whisper base (زبان اجباری فقط فارسی یا انگلیسی)
-            * پشتیبان: Vosk فارسی + انگلیسی
-            * کیبورد RTL + تک‌ضربه + فشار طولانی فاصله
-            * بدون مدل ناقص
+            ## نسخه ۲.۵.۱ — پایدار و ترمیم‌شده
+            * MainActivity کامل و سالم (مثل نسخه موفق ۲.۴.۰)
+            * موتور Whisper base + پشتیبان Vosk
+            * کیبورد RTL + تک‌ضربه
+            * فقط فارسی و انگلیسی
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
