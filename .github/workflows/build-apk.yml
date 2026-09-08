@@ -56,16 +56,15 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.4.0
-          name: "v2.4.0 - Full IME fix + Whisper base (forced fa/en)"
+          tag_name: v2.5.0
+          name: "v2.5.0 - Stable restore (Whisper + Vosk)"
           body: |
-            ## نسخه ۲.۴.۰
-            * کیبورد کامل RTL + تک‌ضربه واقعی (کار با TalkBack)
-            * فشار طولانی فاصله = تایپ صوتی آفلاین
-            * موتور اصلی: Whisper **base** (زبان همیشه اجباری fa یا en — بدون چینی/ژاپنی)
-            * Vosk به عنوان پشتیبان
-            * لایه‌های عدد و نماد
-            * صدای کلید و ویبره قابل تنظیم
+            ## نسخه ۲.۵.۰ — بازگردانی پایدار
+            * فایل MainActivity که خراب شده بود کامل ترمیم شد
+            * موتور اصلی: Whisper base (زبان اجباری فقط فارسی یا انگلیسی)
+            * پشتیبان: Vosk فارسی + انگلیسی
+            * کیبورد RTL + تک‌ضربه + فشار طولانی فاصله
+            * بدون مدل ناقص
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
