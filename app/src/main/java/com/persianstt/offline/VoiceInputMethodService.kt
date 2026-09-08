@@ -14,9 +14,11 @@ import android.media.ToneGenerator
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.TypedValue
+import android.view.MotionEvent
 import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.EditorInfo
@@ -33,14 +35,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 
-/**
- * کیبورد کامل + تایپ صوتی با موتور Whisper آفلاین (دقت بالاتر)
- * تک‌ضربه برای همه کلیدها (مناسب صفحه‌خوان)
- * فشار طولانی فاصله = صوت
- */
 class VoiceInputMethodService : InputMethodService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -51,6 +47,7 @@ class VoiceInputMethodService : InputMethodService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val pcmChunks = CopyOnWriteArrayList<ShortArray>()
 
+    private var rootView: View? = null
     private var statusView: TextView? = null
     private var row1: LinearLayout? = null
     private var row2: LinearLayout? = null
@@ -69,7 +66,7 @@ class VoiceInputMethodService : InputMethodService() {
         private const val PREFS = "hamdel_stt"
         private const val KEY_VIBE = "key_vibe"
         private const val KEY_SOUND = "key_sound"
-        private const val KEY_LANG = "lang"
+        private const val LONG_PRESS_MS = 450L
 
         private val FA_ROWS = listOf(
             listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج", "چ"),
@@ -98,6 +95,7 @@ class VoiceInputMethodService : InputMethodService() {
 
     override fun onCreateInputView(): View {
         val view = layoutInflater.inflate(R.layout.keyboard_view, null)
+        rootView = view
         statusView = view.findViewById(R.id.imeStatus)
         row1 = view.findViewById(R.id.row1)
         row2 = view.findViewById(R.id.row2)
@@ -105,6 +103,7 @@ class VoiceInputMethodService : InputMethodService() {
         row4 = view.findViewById(R.id.row4)
         isListening = false
         statusView?.visibility = View.GONE
+        applyDirection()
         buildKeyboard()
         ensureWhisper()
         return view
@@ -113,6 +112,7 @@ class VoiceInputMethodService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         if (isListening) stopListening()
+        applyDirection()
         ensureWhisper()
     }
 
@@ -128,12 +128,19 @@ class VoiceInputMethodService : InputMethodService() {
 
     override fun onEvaluateFullscreenMode(): Boolean = false
 
+    private fun currentLangCode(): String = if (currentIsFa) "fa" else "en"
+
+    private fun applyDirection() {
+        val dir = if (currentIsFa && !isSymbols) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        rootView?.layoutDirection = dir
+        listOf(row1, row2, row3, row4).forEach { it?.layoutDirection = dir }
+    }
+
     private fun ensureWhisper() {
-        if (WhisperEngine.isReady(this) && WhisperEngine.load(this, prefs?.getString(KEY_LANG, "") ?: "")) {
+        if (WhisperEngine.isReady(this) && WhisperEngine.load(this, currentLangCode())) {
             statusView?.visibility = View.GONE
             return
         }
-        // Model must be downloaded from MainActivity first
         if (!WhisperEngine.isReady(this)) {
             statusView?.visibility = View.VISIBLE
             statusView?.text = "ابتدا از برنامه اصلی مدل Whisper را دانلود کنید"
@@ -141,6 +148,7 @@ class VoiceInputMethodService : InputMethodService() {
     }
 
     private fun buildKeyboard() {
+        applyDirection()
         row1?.removeAllViews()
         row2?.removeAllViews()
         row3?.removeAllViews()
@@ -153,13 +161,13 @@ class VoiceInputMethodService : InputMethodService() {
         listOf(row1, row2, row3).forEachIndexed { i, row ->
             rows.getOrNull(i)?.forEach { row?.addView(makeKey(it)) }
         }
-        row4?.addView(makeKey(if (isSymbols) "ABC" else "123", 1.2f))
-        row4?.addView(makeKey("MIC", 1.2f))
-        if (!isSymbols) row4?.addView(makeKey(if (currentIsFa) "،" else ",", 0.8f))
-        row4?.addView(makeKey("SPACE", 3.2f))
-        row4?.addView(makeKey(".", 0.8f))
+        row4?.addView(makeKey(if (isSymbols) "ABC" else "123", 1.15f))
+        row4?.addView(makeKey("MIC", 1.15f))
+        if (!isSymbols) row4?.addView(makeKey(if (currentIsFa) "،" else ",", 0.75f))
+        row4?.addView(makeKey("SPACE", 3.0f))
+        row4?.addView(makeKey(".", 0.75f))
         row4?.addView(makeKey(if (currentIsFa) "EN" else "FA", 1.0f))
-        row4?.addView(makeKey("↵", 1.2f))
+        row4?.addView(makeKey("↵", 1.15f))
     }
 
     private fun makeKey(label: String, weight: Float = 1f): Button {
@@ -167,7 +175,10 @@ class VoiceInputMethodService : InputMethodService() {
         val lp = LinearLayout.LayoutParams(0, dp(48), weight)
         lp.setMargins(dp(2), dp(2), dp(2), dp(2))
         btn.layoutParams = lp
-        btn.text = if (label == "SPACE") (if (currentIsFa) "فاصله" else "space") else label
+        btn.text = when (label) {
+            "SPACE" -> if (currentIsFa) "فاصله" else "space"
+            else -> label
+        }
         btn.contentDescription = when (label) {
             "SPACE" -> "فاصله. برای تایپ صوتی نگه دارید"
             "MIC" -> "میکروفون تایپ صوتی"
@@ -188,7 +199,7 @@ class VoiceInputMethodService : InputMethodService() {
         btn.isClickable = true
         btn.isFocusable = true
         btn.isLongClickable = label == "SPACE" || label == "MIC"
-        // کمک به صفحه‌خوان: اکشن کلیک واضح
+
         btn.accessibilityDelegate = object : View.AccessibilityDelegate() {
             override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
                 super.onInitializeAccessibilityNodeInfo(host, info)
@@ -199,35 +210,68 @@ class VoiceInputMethodService : InputMethodService() {
                     info.addAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
                 }
             }
+            override fun performAccessibilityAction(host: View, action: Int, args: android.os.Bundle?): Boolean {
+                if (action == AccessibilityNodeInfo.ACTION_CLICK) {
+                    onKeyTap(label)
+                    return true
+                }
+                if (action == AccessibilityNodeInfo.ACTION_LONG_CLICK && (label == "SPACE" || label == "MIC")) {
+                    if (isListening) stopListening() else startListening()
+                    return true
+                }
+                return super.performAccessibilityAction(host, action, args)
+            }
         }
 
-        if (label == "SPACE") {
-            btn.setOnClickListener {
-                currentInputConnection?.commitText(" ", 1)
-                vibe(15)
-                playKeySound()
-            }
-            btn.setOnLongClickListener {
+        var longFired = false
+        val longRunnable = Runnable {
+            longFired = true
+            if (label == "SPACE" || label == "MIC") {
                 if (isListening) stopListening() else startListening()
-                true
             }
-        } else {
-            btn.setOnClickListener { onKeyTap(label) }
+        }
+
+        btn.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    longFired = false
+                    v.setBackgroundColor(Color.parseColor("#555555"))
+                    if (label == "SPACE" || label == "MIC") {
+                        mainHandler.postDelayed(longRunnable, LONG_PRESS_MS)
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    mainHandler.removeCallbacks(longRunnable)
+                    v.setBackgroundColor(Color.parseColor("#333333"))
+                    if (event.actionMasked == MotionEvent.ACTION_UP && !longFired) {
+                        onKeyTap(label)
+                    }
+                    true
+                }
+                else -> false
+            }
         }
         return btn
     }
 
     private fun onKeyTap(label: String) {
         val ic = currentInputConnection ?: return
-        vibe(15)
+        vibe(12)
         playKeySound()
         when (label) {
+            "SPACE" -> ic.commitText(" ", 1)
             "⌫" -> ic.deleteSurroundingText(1, 0)
             "⇧" -> isShift = !isShift
             "MIC" -> if (isListening) stopListening() else startListening()
             "123" -> { isSymbols = true; buildKeyboard() }
             "ABC" -> { isSymbols = false; buildKeyboard() }
-            "EN", "FA" -> { isSymbols = false; currentIsFa = !currentIsFa; buildKeyboard() }
+            "EN", "FA" -> {
+                isSymbols = false
+                currentIsFa = !currentIsFa
+                buildKeyboard()
+                if (WhisperEngine.isReady(this)) WhisperEngine.load(this, currentLangCode())
+            }
             "↵" -> {
                 ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER))
                 ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ENTER))
@@ -260,7 +304,7 @@ class VoiceInputMethodService : InputMethodService() {
 
     private fun playKeySound() {
         if (prefs?.getBoolean(KEY_SOUND, true) != true) return
-        try { toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 20) } catch (_: Exception) {}
+        try { toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 18) } catch (_: Exception) {}
     }
 
     private fun playVoiceStartSound() {
@@ -278,54 +322,36 @@ class VoiceInputMethodService : InputMethodService() {
             Toast.makeText(this, "ابتدا از برنامه اصلی مدل Whisper را دانلود کنید", Toast.LENGTH_LONG).show()
             return
         }
-        if (!WhisperEngine.load(this, prefs?.getString(KEY_LANG, "") ?: "")) {
-            Toast.makeText(this, "خطا در بارگذاری مدل Whisper", Toast.LENGTH_SHORT).show()
+        if (!WhisperEngine.load(this, currentLangCode())) {
+            Toast.makeText(this, "خطا در بارگذاری مدل", Toast.LENGTH_SHORT).show()
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+            != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, R.string.need_mic, Toast.LENGTH_LONG).show()
             return
         }
         if (isListening) return
-
         try {
             pcmChunks.clear()
-            val minBuf = AudioRecord.getMinBufferSize(
-                SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
-            )
+            val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             if (minBuf <= 0) throw IllegalStateException("buffer error")
             val ar = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
                 minBuf.coerceAtLeast(SAMPLE_RATE / 2)
             )
-            if (ar.state != AudioRecord.STATE_INITIALIZED) {
-                ar.release()
-                throw IllegalStateException("AudioRecord init failed")
-            }
+            if (ar.state != AudioRecord.STATE_INITIALIZED) { ar.release(); throw IllegalStateException("AudioRecord init failed") }
             ar.startRecording()
-            synchronized(stopLock) {
-                audioRecord = ar
-                isListening = true
-            }
-            playVoiceStartSound()
-            vibe(40)
+            synchronized(stopLock) { audioRecord = ar; isListening = true }
+            playVoiceStartSound(); vibe(40)
             statusView?.visibility = View.VISIBLE
-            statusView?.text = "در حال ضبط… برای توقف MIC را بزنید"
-
+            statusView?.text = if (currentIsFa) "ضبط فارسی… MIC = توقف" else "Recording EN… MIC = stop"
             listenJob = scope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(4096)
                 while (isActive && isListening) {
-                    val n = try {
-                        synchronized(stopLock) { audioRecord?.read(buffer, 0, buffer.size) ?: -1 }
-                    } catch (_: Exception) { -1 }
-                    if (n > 0) {
-                        pcmChunks.add(buffer.copyOf(n))
-                    }
+                    val n = try { synchronized(stopLock) { audioRecord?.read(buffer, 0, buffer.size) ?: -1 } } catch (_: Exception) { -1 }
+                    if (n > 0) pcmChunks.add(buffer.copyOf(n))
                 }
             }
         } catch (e: Exception) {
@@ -339,35 +365,24 @@ class VoiceInputMethodService : InputMethodService() {
         isListening = false
         try { listenJob?.cancel() } catch (_: Exception) {}
         listenJob = null
-
         mainHandler.post {
             synchronized(stopLock) {
                 try {
                     audioRecord?.let { ar ->
-                        try {
-                            if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) ar.stop()
-                        } catch (_: Exception) {}
+                        try { if (ar.recordingState == AudioRecord.RECORDSTATE_RECORDING) ar.stop() } catch (_: Exception) {}
                         try { ar.release() } catch (_: Exception) {}
                     }
                 } catch (_: Exception) {}
                 audioRecord = null
             }
-            playVoiceStopSound()
-            vibe(20)
+            playVoiceStopSound(); vibe(20)
             statusView?.visibility = View.VISIBLE
             statusView?.text = "در حال تشخیص…"
-
-            // Decode with Whisper on background
-            val chunks = pcmChunks.toList()
-            pcmChunks.clear()
+            val chunks = pcmChunks.toList(); pcmChunks.clear()
             scope.launch(Dispatchers.IO) {
                 val total = chunks.sumOf { it.size }
-                val pcm = ShortArray(total)
-                var o = 0
-                for (c in chunks) {
-                    System.arraycopy(c, 0, pcm, o, c.size)
-                    o += c.size
-                }
+                val pcm = ShortArray(total); var o = 0
+                for (c in chunks) { System.arraycopy(c, 0, pcm, o, c.size); o += c.size }
                 val text = if (pcm.isNotEmpty()) WhisperEngine.transcribe(pcm, SAMPLE_RATE) else ""
                 withContext(Dispatchers.Main) {
                     if (text.isNotBlank()) {
