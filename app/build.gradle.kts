@@ -65,4 +65,5 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.14.0@aar")
 
     implementation(files("libs/sherpa-onnx.aar"))
+    implementation("org.apache.commons:commons-compress:1.26.2")
 }
