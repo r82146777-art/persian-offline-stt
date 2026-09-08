@@ -56,15 +56,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.8.0
-          name: "v1.8.0 - آفلاین تایپ + force fa/en"
+          tag_name: v1.9.0
+          name: "v1.9.0 - RTL + single-tap + fa/en only"
           body: |
-            ## نسخه ۱.۸.۰ — آفلاین تایپ
+            ## نسخه ۱.۹.۰ — آفلاین تایپ
 
-            - اسم برنامه: آفلاین تایپ
-            - زبان تشخیص همیشه اجباری fa یا en (دیگر چینی/ژاپنی نمی‌نویسد)
-            - فیلتر تکرار و حروف چینی/ژاپنی
-            - کیبورد تک‌ضربه
+            - چیدمان کیبورد راست‌به‌چپ (RTL) برای فارسی
+            - تایپ تک‌ضربه واقعی (مثل کیبورد افراد بینا)
+            - تشخیص فقط فارسی یا انگلیسی (نه چینی/ژاپنی)
             - فشار طولانی فاصله = تایپ صوتی
           files: app/build/outputs/apk/debug/*.apk
           draft: false
