@@ -56,16 +56,15 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.0
-          name: "v2.0.0 - Vosk engine + no subtype picker"
+          tag_name: v2.1.0
+          name: "v2.1.0 - Fixed IME + Vosk fa/en + single subtype"
           body: |
-            ## v2.0.0 Offline Type
-            - Single IME subtype (no English/Farsi picker dialog)
-            - Vosk engine FA+EN (better Persian than Whisper tiny)
-            - RTL keyboard + single-tap
-            - Long-press space for voice
+            ## نسخه ۲.۱.۰
+            * فایل سرویس کیبورد (که خراب شده بود) کامل بازنویسی شد
+            * فقط یک subtype → دیگر دو گزینه انگلیسی/کیبورد نشان داده نمی‌شود
+            * موتور Vosk اختصاصی فارسی + انگلیسی (بدون چینی/ژاپنی)
+            * کیبورد راست‌به‌چپ + تک‌ضربه واقعی
+            * فشار طولانی فاصله = تایپ صوتی
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
