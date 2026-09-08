@@ -3,11 +3,11 @@
     android:settingsActivity="com.persianstt.offline.MainActivity"
     android:supportsSwitchingToNextInputMethod="true"
     android:isDefault="false">
+    <!-- Single subtype only — prevents the English / Keyboard picker dialog -->
     <subtype
         android:label="@string/ime_name"
         android:imeSubtypeMode="keyboard"
         android:imeSubtypeLocale="fa_IR"
         android:languageTag="fa-IR"
-        android:imeSubtypeExtraValue="KeyboardLayoutSet=qwerty,AsciiCapable,EnabledWhenDefaultIsNotAsciiCapable"
         android:isAsciiCapable="true" />
 </input-method>
