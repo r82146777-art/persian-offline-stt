@@ -56,14 +56,16 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.3.0
-          name: "v2.3.0 - Whisper base engine (higher accuracy)"
+          tag_name: v2.4.0
+          name: "v2.4.0 - Full IME fix + Whisper base (forced fa/en)"
           body: |
-            ## نسخه ۲.۳.۰
-            * موتور اصلی: Whisper **base** (دقت خیلی بالاتر از tiny/Vosk small)
-            * زبان همیشه اجباری fa یا en (بدون چینی/ژاپنی)
-            * Vosk فقط پشتیبان
-            * تک‌ضربه کیبورد حفظ شده
+            ## نسخه ۲.۴.۰
+            * کیبورد کامل RTL + تک‌ضربه واقعی (کار با TalkBack)
+            * فشار طولانی فاصله = تایپ صوتی آفلاین
+            * موتور اصلی: Whisper **base** (زبان همیشه اجباری fa یا en — بدون چینی/ژاپنی)
+            * Vosk به عنوان پشتیبان
+            * لایه‌های عدد و نماد
+            * صدای کلید و ویبره قابل تنظیم
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
