@@ -137,6 +137,7 @@ class MainActivity : AppCompatActivity() {
                 prefs.edit().putString(KEY_LANG, currentLang).apply()
                 updateLangBadge()
                 Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
+                VoskEngine.release()
                 WhisperEngine.release()
                 prepareModel()
             }.show()
@@ -163,9 +164,9 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود مدل Whisper base…"
+                binding.status.text = "دانلود مدل Vosk فارسی…"
                 withContext(Dispatchers.IO) {
-                    WhisperEngine.ensureModel(this@MainActivity) { pct ->
+                    VoskEngine.ensureModels(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
@@ -173,15 +174,15 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    WhisperEngine.load(this@MainActivity, currentLang)
+                    VoskEngine.load(this@MainActivity, currentLang)
                     try {
-                        if (!VoskEngine.isAnyReady(this@MainActivity)) {
-                            VoskEngine.ensureModels(this@MainActivity) {}
+                        if (!WhisperEngine.isReady(this@MainActivity)) {
+                            WhisperEngine.ensureModel(this@MainActivity) {}
                         }
                     } catch (_: Exception) {}
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "آماده — موتور Whisper آفلاین"
+                binding.status.text = "آماده — موتور Vosk آفلاین (فارسی)"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = true
             } catch (e: Exception) {
@@ -195,7 +196,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!WhisperEngine.isReady(this)) {
+        if (!VoskEngine.isAnyReady(this) && !WhisperEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -262,15 +263,22 @@ class MainActivity : AppCompatActivity() {
             var text = ""
             if (pcm.size >= SAMPLE_RATE / 2) {
                 try {
-                    WhisperEngine.load(this@MainActivity, currentLang)
-                    text = WhisperEngine.transcribe(pcm, SAMPLE_RATE)
-                } catch (_: Exception) {}
-                if (text.length < 2) {
-                    try {
-                        VoskEngine.load(this@MainActivity, currentLang)
+                    if (currentLang == LANG_FA) {
+                        VoskEngine.load(this@MainActivity, "fa")
                         text = VoskEngine.transcribe(pcm, SAMPLE_RATE)
-                    } catch (_: Exception) {}
-                }
+                        if (text.length < 2) {
+                            WhisperEngine.load(this@MainActivity, "fa")
+                            text = WhisperEngine.transcribe(pcm, SAMPLE_RATE)
+                        }
+                    } else {
+                        WhisperEngine.load(this@MainActivity, "en")
+                        text = WhisperEngine.transcribe(pcm, SAMPLE_RATE)
+                        if (text.length < 2) {
+                            VoskEngine.load(this@MainActivity, "en")
+                            text = VoskEngine.transcribe(pcm, SAMPLE_RATE)
+                        }
+                    }
+                } catch (_: Exception) {}
             }
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
@@ -282,7 +290,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
                 }
-                binding.status.text = "آماده — موتور Whisper آفلاین"
+                binding.status.text = "آماده — موتور Vosk آفلاین"
             }
         }
     }
@@ -313,6 +321,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopListening()
+        VoskEngine.release()
         WhisperEngine.release()
         super.onDestroy()
     }
