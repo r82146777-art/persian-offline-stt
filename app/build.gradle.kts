@@ -11,8 +11,8 @@ android {
         applicationId = "com.persianstt.offline"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.9.0"
+        versionCode = 14
+        versionName = "2.0.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -64,6 +64,5 @@ dependencies {
     }
     implementation("net.java.dev.jna:jna:5.14.0@aar")
 
-    // sherpa-onnx AAR (downloaded in CI / libs folder)
     implementation(files("libs/sherpa-onnx.aar"))
 }

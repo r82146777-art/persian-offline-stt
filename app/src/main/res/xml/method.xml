@@ -4,15 +4,10 @@
     android:supportsSwitchingToNextInputMethod="true"
     android:isDefault="false">
     <subtype
-        android:label="@string/ime_subtype_label"
+        android:label="@string/ime_name"
         android:imeSubtypeMode="keyboard"
         android:imeSubtypeLocale="fa_IR"
-        android:languageTag="fa"
-        android:imeSubtypeExtraValue="KeyboardLayoutSet=qwerty" />
-    <subtype
-        android:label="@string/ime_subtype_label_en"
-        android:imeSubtypeMode="keyboard"
-        android:imeSubtypeLocale="en_US"
-        android:languageTag="en"
-        android:imeSubtypeExtraValue="KeyboardLayoutSet=qwerty" />
+        android:languageTag="fa-IR"
+        android:imeSubtypeExtraValue="KeyboardLayoutSet=qwerty,AsciiCapable,EnabledWhenDefaultIsNotAsciiCapable"
+        android:isAsciiCapable="true" />
 </input-method>

@@ -56,15 +56,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.9.0
-          name: "v1.9.0 - RTL + single-tap + fa/en only"
+          tag_name: v2.0.0
+          name: "v2.0.0 - Vosk engine + no subtype picker"
           body: |
-            ## نسخه ۱.۹.۰ — آفلاین تایپ
-
-            - چیدمان کیبورد راست‌به‌چپ (RTL) برای فارسی
-            - تایپ تک‌ضربه واقعی (مثل کیبورد افراد بینا)
-            - تشخیص فقط فارسی یا انگلیسی (نه چینی/ژاپنی)
-            - فشار طولانی فاصله = تایپ صوتی
+            ## v2.0.0 Offline Type
+            - Single IME subtype (no English/Farsi picker dialog)
+            - Vosk engine FA+EN (better Persian than Whisper tiny)
+            - RTL keyboard + single-tap
+            - Long-press space for voice
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
