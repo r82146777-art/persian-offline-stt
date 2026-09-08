@@ -56,14 +56,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.6.0
-          name: "v2.6.0 - Stable fixed build (Whisper base + Vosk)"
+          tag_name: v2.7.0
+          name: "v2.7.0 - Vosk primary (no Whisper garbage on Persian)"
           body: |
-            ## نسخه ۲.۶.۰
-            * خطای بیلد (stringهای گم‌شده) رفع شد
-            * موتور Whisper base + پشتیبان Vosk
-            * فقط فارسی و انگلیسی
+            ## نسخه ۲.۷.۰
+            * موتور اصلی برای فارسی: **Vosk** (بدون هذیان و متن قاطی)
+            * Whisper فقط برای انگلیسی / پشتیبان
             * کیبورد RTL + تک‌ضربه + فشار طولانی فاصله
+            * اگر مدل قبلی را دارید، یک‌بار مدل Vosk را دوباره دانلود کنید
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
