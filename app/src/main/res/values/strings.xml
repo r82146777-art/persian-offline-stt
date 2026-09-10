@@ -3,7 +3,7 @@
     <string name="app_name">آفلاین تایپ</string>
     <string name="status_ready">آماده — دکمه میکروفون را بزنید</string>
     <string name="status_listening">در حال شنیدن… صحبت کنید</string>
-    <string name="status_downloading">در حال دانلود مدل Whisper…</string>
+    <string name="status_downloading">در حال دانلود مدل Vosk…</string>
     <string name="status_extracting">در حال آماده‌سازی مدل…</string>
     <string name="status_loading">در حال بارگذاری مدل…</string>
     <string name="status_error">خطا</string>
@@ -15,7 +15,7 @@
     <string name="copied">کپی شد</string>
     <string name="need_mic">مجوز میکروفون لازم است</string>
     <string name="offline_note">بعد از دانلود مدل، کاملاً آفلاین — بدون گوگل</string>
-    <string name="model_info">موتور: Whisper base + Vosk (فارسی/انگلیسی) | گروه تکنولوژی همدل</string>
+    <string name="model_info">موتور: Vosk آفلاین (فارسی) + کلیپ‌بورد داخل کیبورد | گروه تکنولوژی همدل</string>
     <string name="menu_language">انتخاب زبان تشخیص</string>
     <string name="menu_sound">صدای کلید (روشن/خاموش)</string>
     <string name="menu_vibe">ویبره کلید (روشن/خاموش)</string>
@@ -31,15 +31,15 @@
     <string name="vibe_on">ویبره روشن شد</string>
     <string name="vibe_off">ویبره خاموش شد</string>
     <string name="help_title">راهنما</string>
-    <string name="help_body">نحوه استفاده:\n۱. مدل را دانلود کنید.\n۲. کیبورد «آفلاین تایپ» را در تنظیمات فعال کنید.\n۳. فشار طولانی فاصله = تایپ صوتی.\n۴. فقط فارسی و انگلیسی تشخیص داده می‌شود.</string>
-    <string name="help_msg">نحوه استفاده:\n۱. مدل را دانلود کنید.\n۲. کیبورد «آفلاین تایپ» را در تنظیمات فعال کنید.\n۳. فشار طولانی فاصله = تایپ صوتی.\n۴. فقط فارسی و انگلیسی تشخیص داده می‌شود.</string>
+    <string name="help_body">نحوه استفاده از کیبورد:\n\n۱. مدل را از این برنامه دانلود کنید.\n\n۲. تنظیمات گوشی → زبان و ورودی → کیبوردها → «آفلاین تایپ» را روشن کنید.\n\n۳. در هر برنامه این کیبورد را انتخاب کنید.\n\n۴. تایپ عادی با کلیدها (تک‌ضربه).\n\n۵. تایپ صوتی آفلاین: فشار طولانی روی «فاصله» یا دکمه 🎤.\n\n۶. کلیپ‌بورد: دکمه «📋 کلیپ‌بورد» را بزنید — متن‌های کپی‌شده ذخیره و با یک ضربه جایگذاری می‌شوند (مثل کیبورد سامسونگ).\n   فشار طولانی روی هر آیتم = حذف از تاریخچه.\n\n۷. دکمه ۱۲۳ برای اعداد و علائم.\n\n۸. از منوی برنامه صدای کلید و ویبره را خاموش/روشن کنید.\n\nنکته: محیط ساکت کیفیت تشخیص را بهتر می‌کند. موتور فقط فارسی و انگلیسی.</string>
+    <string name="help_msg">نحوه استفاده از کیبورد:\n۱. مدل را دانلود کنید.\n۲. کیبورد «آفلاین تایپ» را فعال کنید.\n۳. فشار طولانی فاصله = تایپ صوتی.\n۴. دکمه 📋 کلیپ‌بورد برای تاریخچه کپی و جایگذاری.\n۵. فقط فارسی و انگلیسی.</string>
     <string name="about_title">درباره ما</string>
-    <string name="about_body">آفلاین تایپ نسخه ۲.۶.۰\nگروه تکنولوژی همدل\nکیبورد + تایپ صوتی آفلاین (Whisper + Vosk)\nhttps://t.me/Akademi_hamdel</string>
-    <string name="about_msg">آفلاین تایپ نسخه ۲.۶.۰\nگروه تکنولوژی همدل\nکیبورد + تایپ صوتی آفلاین (Whisper + Vosk)\nhttps://t.me/Akademi_hamdel</string>
+    <string name="about_body">آفلاین تایپ\nنسخه ۲.۸.۰\n\nگروه تکنولوژی همدل\nمدیران: رضا ایمان‌زاده و امیرحسین بابایی\n\n• کیبورد کامل RTL + تک‌ضربه\n• تاریخچه کلیپ‌بورد داخل کیبورد (مثل سامسونگ)\n• تایپ صوتی آفلاین با Vosk (بدون گوگل)\n• فقط فارسی و انگلیسی\n\nکانال آکادمی همدل:\nhttps://t.me/Akademi_hamdel</string>
+    <string name="about_msg">آفلاین تایپ نسخه ۲.۸.۰\nگروه تکنولوژی همدل\nکیبورد + کلیپ‌بورد + تایپ صوتی آفلاین (Vosk)\nhttps://t.me/Akademi_hamdel</string>
     <string name="btn_copy_link">کپی لینک کانال</string>
     <string name="link_copied">لینک کانال کپی شد</string>
     <string name="invite_title">دعوت به کانال آکادمی همدل</string>
-    <string name="invite_body">برای آموزش‌ها و ابزارهای جدید به کانال آکادمی همدل بپیوندید.\nhttps://t.me/Akademi_hamdel</string>
+    <string name="invite_body">برای آموزش‌ها، به‌روزرسانی‌ها و ابزارهای جدید گروه تکنولوژی همدل، به کانال آکادمی همدل بپیوندید.\n\nhttps://t.me/Akademi_hamdel</string>
     <string name="invite_msg">برای آموزش‌ها و ابزارهای جدید به کانال آکادمی همدل بپیوندید.\nhttps://t.me/Akademi_hamdel</string>
     <string name="invite_dont_show">دیگر بهم نشون نده</string>
     <string name="invite_hide">دیگر بهم نشون نده</string>
