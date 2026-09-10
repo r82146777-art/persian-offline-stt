@@ -2,9 +2,8 @@ package com.persianstt.offline
 
 /**
  * Converts spoken number words (Persian + English) into digit sequences
- * and removes spaces between consecutive digits.
- * Example: «یک دو سه» or «one two three» → 123
- *          «صد و بیست» → 120 (best-effort)
+ * and fixes common Vosk hallucinations on years / short numbers
+ * (e.g. «یک میلیارد و ۳۸۰۱» → «۱۳۸۱»).
  */
 object NumberNormalizer {
 
@@ -32,21 +31,90 @@ object NumberNormalizer {
         "hundred" to "100", "thousand" to "1000"
     )
 
+    private val scaleWords = listOf(
+        "میلیارد", "میلیون", "هزار", "بیلیون", "تریلیون",
+        "billion", "million", "thousand"
+    )
+
     fun normalize(text: String): String {
         if (text.isBlank()) return text
-        var result = text
+        var result = text.trim()
 
-        // Replace known number words (longer first to avoid partial matches)
+        result = persianDigitsToLatin(result)
+        result = fixScaleHallucination(result)
+
         val all = (faMap + enMap).entries.sortedByDescending { it.key.length }
         for ((word, digit) in all) {
             result = result.replace(Regex("\\b$word\\b", RegexOption.IGNORE_CASE), digit)
         }
 
-        // Remove spaces / "و" between consecutive pure digits
         result = result.replace(Regex("(?<=\\d)\\s*(و)?\\s*(?=\\d)"), "")
-
-        // Clean extra spaces
+        result = stripOrphanScales(result)
         result = result.replace(Regex("\\s{2,}"), " ").trim()
         return result
+    }
+
+    private fun fixScaleHallucination(text: String): String {
+        var t = text
+        t = t.replace(
+            Regex("""یک\\s*میلیارد\\s*و\\s*([0-9]{3,5})""", RegexOption.IGNORE_CASE),
+            "1$1"
+        )
+        t = t.replace(
+            Regex("""یک\\s*میلیون\\s*و\\s*([0-9]{3,5})""", RegexOption.IGNORE_CASE),
+            "1$1"
+        )
+        t = t.replace(
+            Regex("""یک\\s*هزار\\s*و\\s*([0-9]{3,5})""", RegexOption.IGNORE_CASE),
+            "1$1"
+        )
+
+        val scalePattern = Regex(
+            """(?:^|\\s)(یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|1|2|3|4|5|6|7|8|9)?\\s*""" +
+                """(میلیارد|میلیون|هزار|بیلیون|تریلیون|billion|million|thousand)\\s*(?:و\\s*)?""" +
+                """([0-9]{3,5})""",
+            RegexOption.IGNORE_CASE
+        )
+
+        t = scalePattern.replace(t) { match ->
+            val prefix = match.groupValues[1].ifBlank { "1" }
+            val digits = match.groupValues[3]
+            val prefixDigit = when (prefix.lowercase()) {
+                "یک", "1" -> "1"
+                "دو", "2" -> "2"
+                "سه", "3" -> "3"
+                "چهار", "4" -> "4"
+                else -> if (prefix.matches(Regex("\\d"))) prefix else "1"
+            }
+            if (digits.startsWith("13") || digits.startsWith("14") || digits.length == 4) {
+                digits
+            } else {
+                prefixDigit + digits
+            }
+        }
+        return t
+    }
+
+    private fun stripOrphanScales(text: String): String {
+        var t = text
+        for (scale in scaleWords) {
+            t = t.replace(
+                Regex("""\\b$scale\\b\\s*(?=\\d{1,5}\\b)""", RegexOption.IGNORE_CASE),
+                ""
+            )
+            t = t.replace(
+                Regex("""(?<=\\b\\d{1,5})\\s*\\b$scale\\b""", RegexOption.IGNORE_CASE),
+                ""
+            )
+        }
+        return t
+    }
+
+    private fun persianDigitsToLatin(s: String): String {
+        val map = mapOf(
+            '۰' to '0', '۱' to '1', '۲' to '2', '۳' to '3', '۴' to '4',
+            '۵' to '5', '۶' to '6', '۷' to '7', '۸' to '8', '۹' to '9'
+        )
+        return s.map { map[it] ?: it }.joinToString("")
     }
 }
