@@ -54,17 +54,18 @@ class OfflineRecognitionService : RecognitionService() {
         worker = Thread {
             try {
                 // Load ONLY Shenava
-                if (!ShenavaEngine.isReady(this)) {
-                    try {
-                        ShenavaEngine.ensureModel(this) {}
-                    } catch (_: Exception) {}
-                }
+                try {
+                    if (!ShenavaEngine.isReady(this)) ShenavaEngine.ensureModel(this) {}
+                } catch (_: Exception) {}
+                try {
+                    if (!WhisperEngine.isReady(this)) WhisperEngine.ensureModel(this) {}
+                } catch (_: Exception) {}
                 val loaded = try {
-                    ShenavaEngine.load(this)
+                    ShenavaEngine.load(this) || WhisperEngine.load(this, "fa")
                 } catch (_: Exception) {
                     false
                 }
-                if (!loaded && !ShenavaEngine.isReady(this)) {
+                if (!loaded && !ShenavaEngine.isReady(this) && !WhisperEngine.isReady(this)) {
                     listening.set(false)
                     err(listener, SpeechRecognizer.ERROR_CLIENT)
                     return@Thread
@@ -163,12 +164,8 @@ class OfflineRecognitionService : RecognitionService() {
 
                 var text = ""
                 try {
-                    val prepared = AudioPreprocessor.prepare(all, SR)
-                    ShenavaEngine.load(this)
-                    text = ShenavaEngine.transcribe(prepared, SR)
-                    if (text.isNotBlank()) {
-                        text = PersianPostProcess.fix(NumberNormalizer.normalize(text))
-                    }
+                    val pair = DualAsr.transcribe(this, all, SR)
+                    text = pair.first
                 } catch (_: Exception) {}
 
                 listening.set(false)

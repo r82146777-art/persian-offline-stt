@@ -135,6 +135,7 @@ class MainActivity : AppCompatActivity() {
                 updateLangBadge()
                 Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
                 ShenavaEngine.release()
+        WhisperEngine.release()
                 
                 
                 prepareModel()
@@ -201,17 +202,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun prepareModel() {
-        if (ShenavaEngine.isReady(this)) {
+        if (ShenavaEngine.isReady(this) || WhisperEngine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
-                    try { ShenavaEngine.load(this@MainActivity) } catch (_: Throwable) { false }
+                    var a = false; var b = false
+                    try { if (ShenavaEngine.isReady(this@MainActivity)) a = ShenavaEngine.load(this@MainActivity) } catch (_: Throwable) {}
+                    try { if (WhisperEngine.isReady(this@MainActivity)) b = WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) {}
+                    a || b
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — موتور Shenava Koochik"
+                        binding.status.text = "آماده — Shenava + Whisper"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا بارگذاری: ${ShenavaEngine.lastError}"
+                        binding.status.text = "خطا بارگذاری مدل"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -220,7 +224,7 @@ class MainActivity : AppCompatActivity() {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور Shenava Koochik")
-            .setMessage("برای تشخیص فارسی باید موتور (~۱۰۰ مگابایت) دانلود شود.\n\nآیا همین الان دانلود شود؟")
+            .setMessage("برای تشخیص بهتر فارسی دو موتور (~۳۵۰ مگابایت: Shenava + Whisper) دانلود می‌شود.\n\nآیا همین الان دانلود شود؟")
             .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
             .setNegativeButton("لغو") { _, _ ->
                 binding.status.text = "دانلود لغو شد — برای فعال‌سازی دوباره برنامه را باز کنید"
@@ -241,26 +245,32 @@ class MainActivity : AppCompatActivity() {
                     ShenavaEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
-                                binding.progress.progress = pct
-                                binding.status.text = if (pct < 90) "دانلود $pct%" else "آماده‌سازی مدل $pct%"
+                                binding.progress.progress = (pct * 45) / 100
+                                binding.status.text = "دانلود Shenava $pct%"
+                            }
+                        }
+                    }
+                    WhisperEngine.ensureModel(this@MainActivity) { pct ->
+                        runOnUiThread {
+                            if (!isFinishing && !isDestroyed) {
+                                binding.progress.progress = 45 + (pct * 45) / 100
+                                binding.status.text = "دانلود Whisper $pct%"
                             }
                         }
                     }
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "در حال بارگذاری موتور…"
+                binding.status.text = "در حال بارگذاری موتورها…"
                 val ok = withContext(Dispatchers.IO) {
-                    try {
-                        ShenavaEngine.load(this@MainActivity)
-                    } catch (_: OutOfMemoryError) {
-                        false
-                    } catch (_: Exception) {
-                        false
-                    }
+                    var a = false
+                    var b = false
+                    try { a = ShenavaEngine.load(this@MainActivity) } catch (_: Throwable) {}
+                    try { b = WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) {}
+                    a || b
                 }
                 if (isFinishing || isDestroyed) return@launch
                 if (ok) {
-                    binding.status.text = "آماده — موتور Shenava Koochik"
+                    binding.status.text = "آماده — Shenava + Whisper"
                     binding.progress.visibility = android.view.View.GONE
                     binding.micButton.isEnabled = true
                 } else {
@@ -286,7 +296,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!ShenavaEngine.isReady(this)) {
+        if (!ShenavaEngine.isReady(this) && !WhisperEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -350,31 +360,24 @@ class MainActivity : AppCompatActivity() {
                 System.arraycopy(c, 0, pcm, o, c.size)
                 o += c.size
             }
-            var text = ""
-            val prepared = AudioPreprocessor.prepare(pcm, SAMPLE_RATE)
-            if (prepared.size >= SAMPLE_RATE / 2) {
-                try {
-                    // 1) Shenava — strongest Persian
-                    if (ShenavaEngine.isReady(this@MainActivity)) {
-                        ShenavaEngine.load(this@MainActivity)
-                        text = ShenavaEngine.transcribe(prepared, SAMPLE_RATE)
-                    } else {
-                        text = ""
-                    }
-                } catch (_: Exception) {}
-            }
+            val (text, engine) = DualAsr.transcribe(this@MainActivity, pcm, SAMPLE_RATE)
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
                 if (text.isNotBlank()) {
-                    text = PersianPostProcess.fix(NumberNormalizer.normalize(text))
                     if (finalText.isNotEmpty()) finalText.append(" ")
                     finalText.append(text)
                     binding.resultText.setText(finalText.toString())
                     binding.resultText.setSelection(binding.resultText.text.length)
+                    binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
+                    binding.status.text = "آماده — Shenava + Whisper"
                 }
-                binding.status.text = "آماده — موتور Shenava Koochik (قوی‌تر)"
+                binding.micButton.postDelayed({
+                    if (!isFinishing && !isDestroyed) {
+                        binding.status.text = "آماده — Shenava + Whisper"
+                    }
+                }, 2500)
             }
         }
     }
@@ -406,6 +409,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         stopListening()
         ShenavaEngine.release()
+        WhisperEngine.release()
         
         super.onDestroy()
     }

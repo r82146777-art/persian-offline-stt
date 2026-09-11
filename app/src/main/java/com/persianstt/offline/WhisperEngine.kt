@@ -1,6 +1,7 @@
 package com.persianstt.offline
 
 import android.content.Context
+import android.util.Log
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
@@ -12,26 +13,26 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Offline Whisper **base** (int8) via sherpa-onnx.
- * Much more accurate than tiny for Persian/English.
- * Language is ALWAYS forced to "fa" or "en" (never auto)
- * to prevent Chinese / Japanese hallucinations.
+ * Whisper **small** int8, language forced to fa (or en).
+ * Better word boundaries than pure CTC for short phrases.
  */
 object WhisperEngine {
 
-    private const val MODEL_DIR = "whisper-base"
-    private const val ENC = "base-encoder.int8.onnx"
-    private const val DEC = "base-decoder.int8.onnx"
-    private const val TOK = "base-tokens.txt"
+    private const val TAG = "WhisperEngine"
+    private const val MODEL_DIR = "whisper-small"
+    private const val ENC = "small-encoder.int8.onnx"
+    private const val DEC = "small-decoder.int8.onnx"
+    private const val TOK = "small-tokens.txt"
 
     private val FILES = mapOf(
-        ENC to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-encoder.int8.onnx",
-        DEC to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-decoder.int8.onnx",
-        TOK to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-tokens.txt"
+        ENC to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-encoder.int8.onnx",
+        DEC to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-decoder.int8.onnx",
+        TOK to "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-tokens.txt"
     )
 
     @Volatile private var recognizer: OfflineRecognizer? = null
     @Volatile private var loadedLang: String = ""
+    @Volatile var lastError: String = ""
 
     private val BAD_SCRIPT = Regex(
         "[\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff" +
@@ -43,12 +44,19 @@ object WhisperEngine {
 
     fun isReady(context: Context): Boolean {
         val dir = modelDir(context)
-        return File(dir, ENC).exists() && File(dir, DEC).exists() && File(dir, TOK).exists()
+        return File(dir, ENC).exists() && File(dir, ENC).length() > 1_000_000 &&
+            File(dir, DEC).exists() && File(dir, DEC).length() > 1_000_000 &&
+            File(dir, TOK).exists()
     }
 
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
         val dir = modelDir(context)
         if (!dir.exists()) dir.mkdirs()
+        // wipe old base
+        try {
+            File(context.applicationContext.filesDir, "whisper-models/whisper-base")
+                .deleteRecursively()
+        } catch (_: Exception) {}
         val entries = FILES.entries.toList()
         entries.forEachIndexed { index, (name, url) ->
             val dest = File(dir, name)
@@ -67,19 +75,21 @@ object WhisperEngine {
 
     private fun download(urlStr: String, dest: File, onProgress: (Int) -> Unit) {
         val tmp = File(dest.absolutePath + ".part")
-        val url = URL(urlStr)
-        val conn = (url.openConnection() as HttpURLConnection).apply {
+        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
             connectTimeout = 30_000
-            readTimeout = 300_000
+            readTimeout = 600_000
             instanceFollowRedirects = true
         }
         conn.connect()
+        if (conn.responseCode !in 200..299) {
+            throw IllegalStateException("دانلود Whisper ناموفق: ${conn.responseCode}")
+        }
         val total = conn.contentLengthLong.coerceAtLeast(1)
         var done = 0L
         var last = -1
-        BufferedInputStream(conn.inputStream).use { input ->
+        BufferedInputStream(conn.inputStream, 64 * 1024).use { input ->
             FileOutputStream(tmp).use { out ->
-                val buf = ByteArray(64 * 1024)
+                val buf = ByteArray(128 * 1024)
                 while (true) {
                     val read = input.read(buf)
                     if (read <= 0) break
@@ -109,26 +119,41 @@ object WhisperEngine {
         }
         if (recognizer != null && loadedLang == lang) return true
         release()
-        if (!isReady(context)) return false
-        val dir = modelDir(context)
-        val config = OfflineRecognizerConfig(
-            modelConfig = OfflineModelConfig(
-                whisper = OfflineWhisperModelConfig(
-                    encoder = File(dir, ENC).absolutePath,
-                    decoder = File(dir, DEC).absolutePath,
-                    language = lang,
-                    task = "transcribe",
-                    tailPaddings = 1000
-                ),
-                tokens = File(dir, TOK).absolutePath,
-                modelType = "whisper",
-                numThreads = 2,
-                provider = "cpu"
+        if (!isReady(context)) {
+            lastError = "مدل Whisper نیست"
+            return false
+        }
+        return try {
+            val dir = modelDir(context)
+            System.gc()
+            val config = OfflineRecognizerConfig(
+                modelConfig = OfflineModelConfig(
+                    whisper = OfflineWhisperModelConfig(
+                        encoder = File(dir, ENC).absolutePath,
+                        decoder = File(dir, DEC).absolutePath,
+                        language = lang,
+                        task = "transcribe",
+                        tailPaddings = 1200
+                    ),
+                    tokens = File(dir, TOK).absolutePath,
+                    modelType = "whisper",
+                    numThreads = 2,
+                    provider = "cpu"
+                )
             )
-        )
-        recognizer = OfflineRecognizer(config = config)
-        loadedLang = lang
-        return true
+            recognizer = OfflineRecognizer(config = config)
+            loadedLang = lang
+            lastError = ""
+            true
+        } catch (e: OutOfMemoryError) {
+            lastError = "حافظه کم برای Whisper"
+            Log.e(TAG, "OOM", e)
+            false
+        } catch (e: Exception) {
+            lastError = e.message ?: "خطای Whisper"
+            Log.e(TAG, "load fail", e)
+            false
+        }
     }
 
     @Synchronized
@@ -141,16 +166,13 @@ object WhisperEngine {
     @Synchronized
     fun transcribe(pcm16: ShortArray, sampleRate: Int = 16000): String {
         val r = recognizer ?: return ""
-        if (pcm16.isEmpty()) return ""
-        if (pcm16.size < sampleRate / 3) return ""
-
+        if (pcm16.isEmpty() || pcm16.size < sampleRate / 5) return ""
         val floats = FloatArray(pcm16.size) { i -> pcm16[i] / 32768.0f }
         val stream = r.createStream()
         return try {
             stream.acceptWaveform(floats, sampleRate)
             r.decode(stream)
-            val raw = r.getResult(stream).text.trim()
-            cleanResult(raw)
+            cleanResult(r.getResult(stream).text.trim())
         } catch (_: Exception) {
             ""
         } finally {
@@ -161,20 +183,12 @@ object WhisperEngine {
     private fun cleanResult(text: String): String {
         if (text.isBlank()) return ""
         if (BAD_SCRIPT.containsMatchIn(text)) return ""
-
         var t = text
-        t = t.replace(Regex("(\\S+)(?:\\s+\\1){2,}"), "$1")
-        t = t.replace(Regex("(.)\\1{4,}"), "$1$1")
-
-        val tokens = t.split(Regex("\\s+")).filter { it.isNotBlank() }
-        if (tokens.size >= 4) {
-            val mostCommon = tokens.groupingBy { it }.eachCount().maxByOrNull { it.value }
-            if (mostCommon != null && mostCommon.value * 2 >= tokens.size) {
-                t = mostCommon.key
-            }
-        }
-
-        t = NumberNormalizer.normalize(t)
+        // drop whisper punctuation noise
+        t = t.replace(Regex("""[«»""]"""), "")
+        t = t.replace(Regex("""\s{2,}"""), " ").trim()
+        // reject pure english if we forced fa and text is only latin (optional soft)
+        t = NumberNormalizer.normalize(PersianPostProcess.fix(t))
         return t.trim()
     }
 }

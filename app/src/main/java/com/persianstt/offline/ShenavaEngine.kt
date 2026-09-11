@@ -254,7 +254,7 @@ object ShenavaEngine {
     @Synchronized
     fun transcribe(pcm16: ShortArray, sampleRate: Int = 16000): String {
         val r = recognizer ?: return ""
-        if (pcm16.isEmpty() || pcm16.size < sampleRate / 4) return ""
+        if (pcm16.isEmpty() || pcm16.size < sampleRate / 6) return ""
         val floats = FloatArray(pcm16.size) { i -> pcm16[i] / 32768.0f }
         val stream = r.createStream()
         return try {

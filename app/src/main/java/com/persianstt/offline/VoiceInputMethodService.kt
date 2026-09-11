@@ -316,22 +316,9 @@ class VoiceInputMethodService : InputMethodService() {
         statusView?.text = "در حال تشخیص با Shenava…"
         scope.launch(Dispatchers.IO) {
             val raw = pcmChunks.flatMap { it.toList() }.toShortArray(); pcmChunks.clear()
-            val all = AudioPreprocessor.prepare(raw, SAMPLE_RATE)
-            var text = ""
-            var engine = ""
-            try {
-                if (ShenavaEngine.isReady(this@VoiceInputMethodService)) {
-                    val ok = ShenavaEngine.load(this@VoiceInputMethodService)
-                    if (ok) {
-                        text = ShenavaEngine.transcribe(all, SAMPLE_RATE)
-                        if (text.isNotBlank()) engine = "Koochik"
-                    }
-                }
-            } catch (e: Exception) {
-                engine = "err:" + (e.message ?: "?")
-            }
-            if (text.isNotBlank()) text = PersianPostProcess.fix(NumberNormalizer.normalize(text))
-            val secs = all.size.toFloat() / SAMPLE_RATE
+            val (text0, engine) = DualAsr.transcribe(this@VoiceInputMethodService, raw, SAMPLE_RATE)
+            var text = text0
+            val secs = raw.size.toFloat() / SAMPLE_RATE
             withContext(Dispatchers.Main) {
                 if (text.isNotBlank()) {
                     currentInputConnection?.commitText(text + " ", 1)
