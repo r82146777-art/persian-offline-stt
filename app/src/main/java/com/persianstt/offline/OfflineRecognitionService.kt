@@ -122,6 +122,9 @@ class OfflineRecognitionService : RecognitionService() {
                     VoskEngine.load(this@OfflineRecognitionService, "fa")
                     text = VoskEngine.transcribe(prepared, SR)
                 }
+                if (text.isNotBlank()) {
+                    text = PersianPostProcess.fix(NumberNormalizer.normalize(text))
+                }
             } catch (_: Exception) {}
             if (text.isNotBlank()) {
                 val bundle = Bundle()

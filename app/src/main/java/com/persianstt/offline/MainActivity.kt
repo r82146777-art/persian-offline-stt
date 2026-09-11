@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.provider.Settings
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.media.AudioFormat
@@ -74,6 +75,8 @@ class MainActivity : AppCompatActivity() {
             finalText.clear()
             binding.resultText.setText("")
         }
+
+        binding.dictationButton.setOnClickListener { showDictationHelp() }
         if (!prefs.getBoolean(KEY_HIDE_INVITE, false)) showInvite()
         prepareModel()
     }
@@ -387,4 +390,35 @@ class MainActivity : AppCompatActivity() {
         WhisperEngine.release()
         super.onDestroy()
     }
+
+    private fun showDictationHelp() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.dictation_title)
+            .setMessage(R.string.dictation_body)
+            .setPositiveButton("باز کردن تنظیمات") { _, _ -> openVoiceInputSettings() }
+            .setNegativeButton(R.string.ok, null)
+            .show()
+    }
+
+    private fun openVoiceInputSettings() {
+        val attempts = listOf(
+            Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
+            Intent("android.settings.VOICE_INPUT_SETTINGS"),
+            Intent(Settings.ACTION_INPUT_METHOD_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS)
+        )
+        for (intent in attempts) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                return
+            } catch (_: Exception) {}
+        }
+        android.widget.Toast.makeText(
+            this,
+            "تنظیمات پیدا نشد. دستی بروید: تنظیمات ← زبان ← ورودی صوتی",
+            android.widget.Toast.LENGTH_LONG
+        ).show()
+    }
+
 }

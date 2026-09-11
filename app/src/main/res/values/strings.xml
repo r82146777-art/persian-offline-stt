@@ -11,6 +11,9 @@
     <string name="btn_stop">توقف</string>
     <string name="btn_copy">کپی متن</string>
     <string name="btn_clear">پاک کردن</string>
+    <string name="btn_dictation">انتخاب به‌عنوان دیکته صوتی سیستم</string>
+    <string name="dictation_title">دیکته صوتی سیستم</string>
+    <string name="dictation_body">با این کار می‌توانید «آفلاین تایپ» را مثل گوگل به‌عنوان موتور دیکته/تایپ صوتی سیستم انتخاب کنید تا در صفحه‌خوان، برنامه‌های دیگر و فیلدهای متنی هم کار کند.\n\nمراحل:\n۱. در صفحه بعد، سرویس صوتی را روی «تایپ صوتی آفلاین فارسی» بگذارید.\n۲. اگر گزینه را ندیدید: تنظیمات ← زبان و ورود ← ورودی صوتی / Voice input.\n۳. مدل باید از قبل داخل برنامه دانلود شده باشد.\n\nنکته: بعضی گوشی‌ها (سامسونگ، شیائومی) مسیر تنظیمات را کمی فرق می‌گذارند.</string>
     <string name="hint_text">متن اینجا ظاهر می‌شود…</string>
     <string name="copied">کپی شد</string>
     <string name="need_mic">مجوز میکروفون لازم است</string>
