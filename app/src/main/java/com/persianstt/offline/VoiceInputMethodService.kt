@@ -318,28 +318,34 @@ class VoiceInputMethodService : InputMethodService() {
             val raw = pcmChunks.flatMap { it.toList() }.toShortArray(); pcmChunks.clear()
             val all = AudioPreprocessor.prepare(raw, SAMPLE_RATE)
             var text = ""
+            var engine = ""
             try {
-                // 1) Shenava Rizeh — strongest Persian
                 if (ShenavaEngine.isReady(this@VoiceInputMethodService)) {
-                    ShenavaEngine.load(this@VoiceInputMethodService)
-                    text = ShenavaEngine.transcribe(all, SAMPLE_RATE)
+                    val ok = ShenavaEngine.load(this@VoiceInputMethodService)
+                    if (ok) {
+                        text = ShenavaEngine.transcribe(all, SAMPLE_RATE)
+                        if (text.isNotBlank()) engine = "Koochik"
+                    }
                 }
-                // 2) Whisper
                 if (text.length < 2 && WhisperEngine.isReady(this@VoiceInputMethodService)) {
                     WhisperEngine.load(this@VoiceInputMethodService, "fa")
                     text = WhisperEngine.transcribe(all, SAMPLE_RATE)
+                    if (text.isNotBlank()) engine = "Whisper"
                 }
-                // 3) Vosk fallback
                 if (text.length < 2 && VoskEngine.isAnyReady(this@VoiceInputMethodService)) {
                     VoskEngine.load(this@VoiceInputMethodService, "fa")
                     text = VoskEngine.transcribe(all, SAMPLE_RATE)
+                    if (text.isNotBlank()) engine = "Vosk"
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                engine = "err:" + (e.message ?: "?")
+            }
+            val secs = all.size.toFloat() / SAMPLE_RATE
             withContext(Dispatchers.Main) {
                 if (text.isNotBlank()) {
                     currentInputConnection?.commitText(text + " ", 1)
-                    statusView?.text = "✓ $text"
-                } else statusView?.text = "چیزی تشخیص داده نشد"
+                    statusView?.text = "✓ [$engine ${"%.1f".format(secs)}s] $text"
+                } else statusView?.text = "چیزی تشخیص داده نشد (${"%.1f".format(secs)}s صدا=$engine)"
                 mainHandler.postDelayed({
                     statusView?.text = "آفلاین تایپ — موتور Shenava Koochik · فشار طولانی فاصله = صوت"
                 }, 2500)
