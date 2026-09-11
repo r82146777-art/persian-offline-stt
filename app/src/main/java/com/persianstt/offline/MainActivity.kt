@@ -86,18 +86,7 @@ class MainActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_language -> { showLanguagePicker(); true }
-            R.id.action_sound -> {
-                val on = !prefs.getBoolean(KEY_SOUND, true)
-                prefs.edit().putBoolean(KEY_SOUND, on).apply()
-                Toast.makeText(this, if (on) R.string.sound_on else R.string.sound_off, Toast.LENGTH_SHORT).show()
-                true
-            }
-            R.id.action_vibe -> {
-                val on = !prefs.getBoolean(KEY_VIBE, true)
-                prefs.edit().putBoolean(KEY_VIBE, on).apply()
-                Toast.makeText(this, if (on) R.string.vibe_on else R.string.vibe_off, Toast.LENGTH_SHORT).show()
-                true
-            }
+            R.id.action_settings -> { showSoundSettings(); true }
             R.id.action_help -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.help_title)
@@ -144,6 +133,60 @@ class MainActivity : AppCompatActivity() {
             }.show()
     }
 
+
+    private fun showSoundSettings() {
+        val soundOn = prefs.getBoolean(KEY_SOUND, true)
+        val vibeOn = prefs.getBoolean(KEY_VIBE, true)
+        val volume = prefs.getInt("sound_volume", 60)
+        val effect = prefs.getInt("sound_effect", 0)
+        val effectNames = arrayOf("بیپ کلاسیک", "تیک کوتاه", "کلیک نرم", "بوق تأیید", "آلارم کوتاه")
+        val status = buildString {
+            append("صدا: "); append(if (soundOn) "روشن" else "خاموش")
+            append("  |  ویبره: "); append(if (vibeOn) "روشن" else "خاموش")
+            append("\nافکت: "); append(effectNames.getOrElse(effect) { effectNames[0] })
+            append("  |  بلندی: "); append(volume); append("%")
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("تنظیمات صدا و ویبره")
+            .setMessage(status)
+            .setPositiveButton(if (soundOn) "خاموش کردن صدا" else "روشن کردن صدا") { _, _ ->
+                prefs.edit().putBoolean(KEY_SOUND, !soundOn).apply()
+                Toast.makeText(this, if (!soundOn) "صدا روشن شد" else "صدا خاموش شد", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton(if (vibeOn) "خاموش ویبره" else "روشن ویبره") { _, _ ->
+                prefs.edit().putBoolean(KEY_VIBE, !vibeOn).apply()
+                Toast.makeText(this, if (!vibeOn) "ویبره روشن شد" else "ویبره خاموش شد", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("افکت و بلندی") { _, _ ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("انتخاب افکت صدا")
+                    .setItems(effectNames) { _, which ->
+                        prefs.edit().putInt("sound_effect", which).apply()
+                        val tones = intArrayOf(
+                            android.media.ToneGenerator.TONE_PROP_BEEP,
+                            android.media.ToneGenerator.TONE_PROP_BEEP2,
+                            android.media.ToneGenerator.TONE_CDMA_PIP,
+                            android.media.ToneGenerator.TONE_PROP_ACK,
+                            android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
+                        )
+                        try {
+                            val tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, volume)
+                            tg.startTone(tones[which], 50)
+                            tg.release()
+                        } catch (_: Exception) {}
+                        // volume picker after effect
+                        val levels = arrayOf("۲۰٪", "۴۰٪", "۶۰٪", "۸۰٪", "۱۰۰٪")
+                        MaterialAlertDialogBuilder(this)
+                            .setTitle("میزان بلندی صدا")
+                            .setItems(levels) { _, w ->
+                                prefs.edit().putInt("sound_volume", (w + 1) * 20).apply()
+                                Toast.makeText(this, "افکت: ${effectNames[which]} — ${levels[w]}", Toast.LENGTH_SHORT).show()
+                            }.show()
+                    }.show()
+            }
+            .show()
+    }
+
     private fun showInvite() {
         val box = CheckBox(this).apply { text = getString(R.string.invite_hide) }
         MaterialAlertDialogBuilder(this)
@@ -167,15 +210,15 @@ class MainActivity : AppCompatActivity() {
                     try { VoskEngine.load(this@MainActivity, currentLang) } catch (_: Exception) {}
                 }
                 if (!isFinishing && !isDestroyed) {
-                    binding.status.text = "آماده — موتور Shenava (فارسی قوی)"
+                    binding.status.text = "آماده — موتور Shenava Koochik (فارسی قوی)"
                     binding.micButton.isEnabled = true
                 }
             }
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور قوی Shenava")
-            .setMessage("برای تشخیص دقیق فارسی و اعداد باید موتور Shenava (~۳۷ مگابایت) دانلود شود.\n\nآیا می‌خواهید همین الان دانلود شود؟")
+            .setTitle("دانلود موتور قوی Shenava Koochik")
+            .setMessage("برای تشخیص دقیق فارسی و اعداد باید موتور Shenava Koochik (~۱۰۰ مگابایت) دانلود شود.\n\nآیا می‌خواهید همین الان دانلود شود؟")
             .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
             .setNegativeButton("لغو") { _, _ ->
                 binding.status.text = "دانلود لغو شد — برای فعال‌سازی دوباره برنامه را باز کنید"
@@ -191,13 +234,13 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود موتور Shenava…"
+                binding.status.text = "دانلود موتور Shenava Koochik…"
                 withContext(Dispatchers.IO) {
                     ShenavaEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
-                                binding.status.text = "دانلود Shenava $pct%"
+                                binding.status.text = "دانلود Koochik $pct%"
                             }
                         }
                     }
@@ -208,7 +251,7 @@ class MainActivity : AppCompatActivity() {
                     } catch (_: Exception) {}
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "آماده — موتور Shenava (فارسی قوی)"
+                binding.status.text = "آماده — موتور Shenava Koochik (فارسی قوی)"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = true
             } catch (e: Exception) {
@@ -316,7 +359,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
                 }
-                binding.status.text = "آماده — موتور Shenava (فارسی قوی)"
+                binding.status.text = "آماده — موتور Shenava Koochik (فارسی قوی)"
             }
         }
     }

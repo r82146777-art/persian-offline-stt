@@ -1,84 +1,124 @@
 package com.persianstt.offline
 
 /**
- * Converts spoken number words to digits and fixes Vosk scale hallucinations
- * e.g. «یک میلیارد و ۳۸۰۱» → «۱۳۸۱»
+ * Converts spoken Persian/English number words → digits.
+ * «هزار و سیصد و هشتاد و یک» → 1381
+ * Collapses scale hallucinations like «یک میلیارد ۱۳۸۱».
  */
 object NumberNormalizer {
 
-    private val faMap = mapOf(
-        "صفر" to "0", "یک" to "1", "دو" to "2", "سه" to "3", "چهار" to "4",
-        "پنج" to "5", "شش" to "6", "هفت" to "7", "هشت" to "8", "نه" to "9",
-        "ده" to "10", "یازده" to "11", "دوازده" to "12", "سیزده" to "13",
-        "چهارده" to "14", "پانزده" to "15", "شانزده" to "16", "هفده" to "17",
-        "هجده" to "18", "نوزده" to "19",
-        "بیست" to "20", "سی" to "30", "چهل" to "40", "پنجاه" to "50",
-        "شصت" to "60", "هفتاد" to "70", "هشتاد" to "80", "نود" to "90",
-        "صد" to "100", "دویست" to "200", "سیصد" to "300", "چهارصد" to "400",
-        "پانصد" to "500", "ششصد" to "600", "هفتصد" to "700", "هشتصد" to "800",
-        "نهصد" to "900"
+    private val wordVal = linkedMapOf(
+        // ones
+        "صفر" to 0L, "یک" to 1L, "یه" to 1L, "دو" to 2L, "سه" to 3L, "چهار" to 4L,
+        "پنج" to 5L, "شش" to 6L, "شیش" to 6L, "هفت" to 7L, "هشت" to 8L, "نه" to 9L,
+        "zero" to 0L, "one" to 1L, "two" to 2L, "three" to 3L, "four" to 4L,
+        "five" to 5L, "six" to 6L, "seven" to 7L, "eight" to 8L, "nine" to 9L,
+        // teens
+        "ده" to 10L, "یازده" to 11L, "دوازده" to 12L, "سیزده" to 13L, "چهارده" to 14L,
+        "پانزده" to 15L, "شانزده" to 16L, "هفده" to 17L, "هجده" to 18L, "نوزده" to 19L,
+        "ten" to 10L, "eleven" to 11L, "twelve" to 12L, "thirteen" to 13L, "fourteen" to 14L,
+        "fifteen" to 15L, "sixteen" to 16L, "seventeen" to 17L, "eighteen" to 18L, "nineteen" to 19L,
+        // tens
+        "بیست" to 20L, "سی" to 30L, "چهل" to 40L, "پنجاه" to 50L,
+        "شصت" to 60L, "هفتاد" to 70L, "هشتاد" to 80L, "نود" to 90L,
+        "twenty" to 20L, "thirty" to 30L, "forty" to 40L, "fifty" to 50L,
+        "sixty" to 60L, "seventy" to 70L, "eighty" to 80L, "ninety" to 90L,
+        // hundreds
+        "صد" to 100L, "یکصد" to 100L, "دویست" to 200L, "سیصد" to 300L, "چهارصد" to 400L,
+        "پانصد" to 500L, "ششصد" to 600L, "شیشصد" to 600L, "هفتصد" to 700L,
+        "هشتصد" to 800L, "نهصد" to 900L, "hundred" to 100L
     )
 
-    private val enMap = mapOf(
-        "zero" to "0", "one" to "1", "two" to "2", "three" to "3", "four" to "4",
-        "five" to "5", "six" to "6", "seven" to "7", "eight" to "8", "nine" to "9",
-        "ten" to "10", "eleven" to "11", "twelve" to "12", "thirteen" to "13",
-        "fourteen" to "14", "fifteen" to "15", "sixteen" to "16", "seventeen" to "17",
-        "eighteen" to "18", "nineteen" to "19",
-        "twenty" to "20", "thirty" to "30", "forty" to "40", "fifty" to "50",
-        "sixty" to "60", "seventy" to "70", "eighty" to "80", "ninety" to "90",
-        "hundred" to "100"
+    private val scales = mapOf(
+        "هزار" to 1_000L, "میلیون" to 1_000_000L, "میلیارد" to 1_000_000_000L,
+        "بیلیون" to 1_000_000_000L, "تریلیون" to 1_000_000_000_000L,
+        "thousand" to 1_000L, "million" to 1_000_000L, "billion" to 1_000_000_000L
     )
 
     fun normalize(text: String): String {
         if (text.isBlank()) return text
         var t = persianDigitsToLatin(text.trim())
-        t = fixScaleHallucination(t)
-        val all = (faMap + enMap).entries.sortedByDescending { it.key.length }
-        for ((word, digit) in all) {
-            t = t.replace(Regex("\\b" + Regex.escape(word) + "\\b", RegexOption.IGNORE_CASE), digit)
-        }
-        t = t.replace(Regex("(?<=\\d)\\s*و?\\s*(?=\\d)"), "")
+        t = collapseScaleHallucination(t)
+        t = convertSpokenNumbers(t)
         t = t.replace(
             Regex("\\b(میلیارد|میلیون|هزار|بیلیون|تریلیون|billion|million|thousand)\\b\\s*", RegexOption.IGNORE_CASE),
             ""
         )
+        t = t.replace(Regex("(?<=\\d)\\s*و\\s*(?=\\d)"), "")
+        t = t.replace(Regex("(?<=\\d)\\s+(?=\\d)"), "")
         return t.replace(Regex("\\s{2,}"), " ").trim()
     }
 
-    private fun fixScaleHallucination(text: String): String {
+    private fun collapseScaleHallucination(text: String): String {
         var t = text
-        // یک میلیارد و 3801
         t = Regex(
-            "(?:یک|1)\\s*(?:میلیارد|میلیون|هزار|billion|million|thousand)\\s*(?:و\\s*)?([0-9]{3,5})",
+            "(?:^|\\s)(?:[0-9]|یک|دو|سه|چهار|پنج)?\\s*(?:میلیارد|میلیون|هزار|billion|million|thousand)\\s*(?:و\\s*)?([0-9]{3,5})\\b",
             RegexOption.IGNORE_CASE
-        ).replace(t) { m ->
-            val digits = m.groupValues[1]
-            if (digits.length == 4 || digits.startsWith("13") || digits.startsWith("14")) digits
-            else "1" + digits
-        }
-        // prefix + scale + digits
+        ).replace(t) { " " + it.groupValues[1] }
         t = Regex(
-            "(?:^|\\s)([0-9]|یک|دو|سه|چهار|پنج)?\\s*(میلیارد|میلیون|هزار|billion|million|thousand)\\s*(?:و\\s*)?([0-9]{3,5})",
+            "\\b([0-9]{3,5})\\s*(?:میلیارد|میلیون|هزار)\\b",
             RegexOption.IGNORE_CASE
-        ).replace(t) { m ->
-            val digits = m.groupValues[3]
-            if (digits.length in 3..5) " " + digits else m.value
-        }
-        // scale + digits alone
-        t = Regex(
-            "\\b(?:میلیارد|میلیون|هزار)\\s*(?:و\\s*)?([0-9]{3,5})\\b",
-            RegexOption.IGNORE_CASE
-        ).replace(t) { m -> m.groupValues[1] }
+        ).replace(t) { it.groupValues[1] }
         return t
+    }
+
+    private fun convertSpokenNumbers(text: String): String {
+        val tokens = text.split(Regex("\\s+|\\s*و\\s*")).filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return text
+        val out = StringBuilder()
+        var i = 0
+        while (i < tokens.size) {
+            val (value, consumed) = tryParse(tokens, i)
+            if (consumed > 0 && value != null) {
+                if (out.isNotEmpty() && out.last() != ' ') out.append(' ')
+                out.append(value)
+                i += consumed
+            } else {
+                if (out.isNotEmpty() && out.last() != ' ') out.append(' ')
+                out.append(tokens[i])
+                i++
+            }
+        }
+        return out.toString()
+    }
+
+    private fun tryParse(tokens: List<String>, start: Int): Pair<Long?, Int> {
+        var i = start
+        var total = 0L
+        var current = 0L
+        var consumed = 0
+        var saw = false
+        while (i < tokens.size) {
+            val w = tokens[i].lowercase()
+            when {
+                wordVal.containsKey(w) -> {
+                    current += wordVal[w]!!
+                    saw = true; consumed++; i++
+                }
+                scales.containsKey(w) -> {
+                    val s = scales[w]!!
+                    if (current == 0L) current = 1L
+                    total += current * s
+                    current = 0L
+                    saw = true; consumed++; i++
+                }
+                w.matches(Regex("\\d+")) -> {
+                    current += w.toLongOrNull() ?: 0L
+                    saw = true; consumed++; i++
+                }
+                else -> break
+            }
+        }
+        if (!saw) return null to 0
+        return (total + current) to consumed
     }
 
     private fun persianDigitsToLatin(s: String): String {
         val map = charArrayOf('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹')
         val sb = StringBuilder(s.length)
         for (c in s) {
-            val i = map.indexOf(c)
-            sb.append(if (i >= 0) ('0'.code + i).toChar() else c)
+            val idx = map.indexOf(c)
+            sb.append(if (idx >= 0) ('0'.code + idx).toChar() else c)
         }
         return sb.toString()
     }

@@ -12,22 +12,23 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Shenava Rizeh v1.0 — Persian-specialized FastConformer CTC (sherpa-onnx).
- * Much higher accuracy on Persian than Vosk-small / Whisper-tiny.
- * ~37 MB int8, offline, fa-only (no CJK hallucinations).
+ * Shenava Koochik v1.0 — flagship Persian FastConformer CTC (114M).
+ * WER ~7.5% on golden-6669 (much stronger than Rizeh 32M / Vosk).
+ * ~100 MB int8, fully offline, fa-only.
  */
 object ShenavaEngine {
 
-    private const val FOLDER = "shenava-rizeh-int8"
+    private const val FOLDER = "shenava-koochik-int8"
     private const val MODEL = "model.int8.onnx"
     private const val TOKENS = "tokens.txt"
     private const val TAR_URL =
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/" +
-            "sherpa-onnx-nemo-ctc-fa-shenava-rizeh-v1.0-non-streaming-int8-2026-06-26.tar.bz2"
+            "sherpa-onnx-nemo-ctc-fa-shenava-koochik-v1.0-non-streaming-int8-2026-06-26.tar.bz2"
 
     @Volatile private var recognizer: OfflineRecognizer? = null
 
@@ -38,7 +39,7 @@ object ShenavaEngine {
         val dir = modelDir(context)
         val m = File(dir, MODEL)
         val t = File(dir, TOKENS)
-        return m.exists() && t.exists() && m.length() > 1_000_000
+        return m.exists() && t.exists() && m.length() > 10_000_000
     }
 
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
@@ -46,14 +47,22 @@ object ShenavaEngine {
             onProgress(100)
             return
         }
+        // remove old rizeh if present
+        try {
+            File(context.applicationContext.filesDir, "shenava-models/shenava-rizeh-int8")
+                .deleteRecursively()
+        } catch (_: Exception) {}
+
         val dir = modelDir(context)
         if (!dir.exists()) dir.mkdirs()
         val tarFile = File(dir, "model.tar.bz2")
-        download(TAR_URL, tarFile) { pct -> onProgress((pct * 85) / 100) }
+        downloadResumable(TAR_URL, tarFile) { pct -> onProgress((pct * 90) / 100) }
+        onProgress(92)
         extractTarBz2(tarFile, dir)
         tarFile.delete()
+        // flatten nested folder if any
         val nested = dir.listFiles()?.firstOrNull {
-            it.isDirectory && (it.name.contains("shenava") || it.name.contains("rizeh") || it.name.contains("nemo"))
+            it.isDirectory && (it.name.contains("shenava") || it.name.contains("koochik") || it.name.contains("nemo"))
         }
         if (nested != null) {
             nested.listFiles()?.forEach { f ->
@@ -66,39 +75,64 @@ object ShenavaEngine {
         onProgress(100)
     }
 
-    private fun download(urlStr: String, dest: File, onProgress: (Int) -> Unit) {
+    /** Resume-friendly download with stable progress updates. */
+    private fun downloadResumable(urlStr: String, dest: File, onProgress: (Int) -> Unit) {
         val tmp = File(dest.absolutePath + ".part")
+        var existing = if (tmp.exists()) tmp.length() else 0L
+
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
             connectTimeout = 30_000
             readTimeout = 300_000
             instanceFollowRedirects = true
+            if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
         }
         conn.connect()
-        val total = conn.contentLengthLong.coerceAtLeast(1)
-        var done = 0L
-        var last = -1
-        BufferedInputStream(conn.inputStream).use { input ->
-            FileOutputStream(tmp).use { out ->
-                val buf = ByteArray(64 * 1024)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n <= 0) break
-                    out.write(buf, 0, n)
-                    done += n
-                    val pct = ((done * 100) / total).toInt().coerceIn(0, 100)
-                    if (pct != last) {
-                        last = pct
+        val code = conn.responseCode
+        // server ignored range → restart
+        if (code == 200 && existing > 0) {
+            existing = 0
+            tmp.delete()
+        }
+        val totalFromHeader = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
+        val total = if (code == 206 && totalFromHeader > 0) existing + totalFromHeader
+        else if (totalFromHeader > 0) totalFromHeader
+        else -1L
+
+        val input = BufferedInputStream(conn.inputStream)
+        val out = if (existing > 0 && code == 206)
+            FileOutputStream(tmp, true)
+        else
+            FileOutputStream(tmp, false)
+
+        var done = existing
+        var lastPct = -1
+        val buf = ByteArray(256 * 1024)
+        try {
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                out.write(buf, 0, n)
+                done += n
+                if (total > 0) {
+                    val pct = ((done * 100) / total).toInt().coerceIn(0, 99)
+                    if (pct != lastPct) {
+                        lastPct = pct
                         onProgress(pct)
                     }
                 }
             }
+            out.flush()
+        } finally {
+            try { out.close() } catch (_: Exception) {}
+            try { input.close() } catch (_: Exception) {}
+            conn.disconnect()
         }
-        conn.disconnect()
         if (dest.exists()) dest.delete()
         if (!tmp.renameTo(dest)) {
             tmp.copyTo(dest, overwrite = true)
             tmp.delete()
         }
+        onProgress(100)
     }
 
     private fun extractTarBz2(tarBz2: File, destDir: File) {
@@ -106,7 +140,7 @@ object ShenavaEngine {
             BZip2CompressorInputStream(BufferedInputStream(fis)).use { bzIn ->
                 TarArchiveInputStream(bzIn).use { tarIn ->
                     var entry = tarIn.nextEntry
-                    val buf = ByteArray(64 * 1024)
+                    val buf = ByteArray(256 * 1024)
                     while (entry != null) {
                         val name = entry.name
                         val relative = name.substringAfter('/', name)
@@ -148,7 +182,7 @@ object ShenavaEngine {
                     ),
                     tokens = File(dir, TOKENS).absolutePath,
                     modelType = "nemo_ctc",
-                    numThreads = 2,
+                    numThreads = 4,
                     provider = "cpu"
                 ),
                 decodingMethod = "greedy_search"

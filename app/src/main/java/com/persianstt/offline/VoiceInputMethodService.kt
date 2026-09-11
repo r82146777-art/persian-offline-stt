@@ -95,7 +95,7 @@ class VoiceInputMethodService : InputMethodService() {
             setPadding(4, 6, 4, 6)
         }
         statusView = TextView(this).apply {
-            text = "آفلاین تایپ — موتور Shenava · فشار طولانی فاصله = صوت"
+            text = "آفلاین تایپ — موتور Shenava Koochik · فشار طولانی فاصله = صوت"
             setTextColor(SUB); textSize = 11f; setPadding(12, 2, 12, 4); gravity = Gravity.CENTER
         }
         root.addView(statusView, lpMW())
@@ -157,7 +157,7 @@ class VoiceInputMethodService : InputMethodService() {
         showClipboard = !showClipboard
         clipboardPanel?.visibility = if (showClipboard) View.VISIBLE else View.GONE
         if (showClipboard) { saveCurrentClipboard(); renderClipboard(); statusView?.text = "کلیپ‌بورد — ضربه = جایگذاری" }
-        else statusView?.text = "آفلاین تایپ — موتور Shenava · فشار طولانی فاصله = صوت"
+        else statusView?.text = "آفلاین تایپ — موتور Shenava Koochik · فشار طولانی فاصله = صوت"
     }
 
     private fun renderClipboard() {
@@ -273,18 +273,37 @@ class VoiceInputMethodService : InputMethodService() {
     private fun deleteLast() { currentInputConnection?.deleteSurroundingText(1, 0) }
 
     private fun playClick() {
-        if (prefs.getBoolean("key_sound", true)) try { toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 30) } catch (_: Exception) {}
+        if (prefs.getBoolean("key_sound", true)) {
+            try {
+                val vol = prefs.getInt("sound_volume", 60).coerceIn(10, 100)
+                val effect = prefs.getInt("sound_effect", 0)
+                val tones = intArrayOf(
+                    ToneGenerator.TONE_PROP_BEEP,
+                    ToneGenerator.TONE_PROP_BEEP2,
+                    ToneGenerator.TONE_CDMA_PIP,
+                    ToneGenerator.TONE_PROP_ACK,
+                    ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
+                )
+                val tone = tones.getOrElse(effect) { ToneGenerator.TONE_PROP_BEEP }
+                // recreate with volume so user setting applies
+                try { toneGen?.release() } catch (_: Exception) {}
+                toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, vol)
+                toneGen?.startTone(tone, 30)
+            } catch (_: Exception) {}
+        }
         if (prefs.getBoolean("key_vibe", true)) try {
+            val strength = prefs.getInt("vibe_strength", 60).coerceIn(10, 100)
+            val ms = 10L + (strength / 10)
             if (android.os.Build.VERSION.SDK_INT >= 26)
-                vibrator?.vibrate(VibrationEffect.createOneShot(15, VibrationEffect.DEFAULT_AMPLITUDE))
-            else { @Suppress("DEPRECATION") vibrator?.vibrate(15) }
+                vibrator?.vibrate(VibrationEffect.createOneShot(ms, (255 * strength / 100).coerceIn(1, 255)))
+            else { @Suppress("DEPRECATION") vibrator?.vibrate(ms) }
         } catch (_: Exception) {}
     }
 
     private fun startVoice() {
         if (isListening) return
         isListening = true; pcmChunks.clear()
-        statusView?.text = "🎤 در حال گوش دادن… (موتور Shenava)"
+        statusView?.text = "🎤 در حال گوش دادن… (موتور Shenava Koochik)"
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         audioRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf * 2)
@@ -334,7 +353,7 @@ class VoiceInputMethodService : InputMethodService() {
                     statusView?.text = "✓ $text"
                 } else statusView?.text = "چیزی تشخیص داده نشد"
                 mainHandler.postDelayed({
-                    statusView?.text = "آفلاین تایپ — موتور Shenava · فشار طولانی فاصله = صوت"
+                    statusView?.text = "آفلاین تایپ — موتور Shenava Koochik · فشار طولانی فاصله = صوت"
                 }, 2500)
             }
         }

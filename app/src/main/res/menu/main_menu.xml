@@ -6,12 +6,8 @@
         android:title="@string/menu_language"
         app:showAsAction="never" />
     <item
-        android:id="@+id/action_sound"
-        android:title="@string/menu_sound"
-        app:showAsAction="never" />
-    <item
-        android:id="@+id/action_vibe"
-        android:title="@string/menu_vibe"
+        android:id="@+id/action_settings"
+        android:title="تنظیمات صدا و ویبره"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_help"

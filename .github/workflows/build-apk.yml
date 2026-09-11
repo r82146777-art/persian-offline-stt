@@ -54,16 +54,16 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.0.1
-          name: "v3.0.1 - Shenava کامل در اپ + کیبورد"
+          tag_name: v3.1.0
+          name: "v3.1.0 - Shenava Koochik قوی + اعداد + تنظیمات صدا"
           body: |
-            ## نسخه ۳.۰.۱ — موتور Shenava همه‌جا
-            * موتور اصلی **Shenava Rizeh** در کیبورد و صفحه اصلی
-            * تأیید دانلود مدل قبل از شروع
-            * دقت خیلی بالاتر روی فارسی و اعداد
+            ## نسخه ۳.۱.۰ — موتور پرچمدار
+            * موتور اصلی: **Shenava Koochik** (۱۱۴M — دقت خیلی بالاتر)
+            * نرمال‌سازی قوی اعداد فارسی (هزار و سیصد → 1300)
+            * دانلود پایدار با resume (گیر نمی‌کند)
+            * تنظیمات صدا: چند افکت + بلندی صدا + ویبره
             * پشتیبان: Vosk + Whisper
-            * کلیپ‌بورد + کیبورد RTL + تک‌ضربه
-            * بار اول مدل Shenava (~۳۷ مگ) را دانلود کنید
+            * بار اول مدل (~۱۰۰ مگ) را دانلود کنید
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
