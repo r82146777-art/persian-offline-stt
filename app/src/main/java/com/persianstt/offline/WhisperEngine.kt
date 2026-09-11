@@ -77,15 +77,23 @@ object WhisperEngine {
         if (!dir.exists()) dir.mkdirs()
         val tarFile = File(dir, "whisper-small.tar.bz2")
         try {
-            downloadResumable(TAR_URL, tarFile) { pct -> onProgress((pct * 88) / 100) }
-            onProgress(90)
+            downloadResumable(TAR_URL, tarFile) { pct -> onProgress((pct * 85) / 100) }
+            onProgress(86)
+            if (!tarFile.exists() || tarFile.length() < 1_000_000) {
+                lastError = "فایل دانلود ناقص است"
+                throw IllegalStateException(lastError)
+            }
+            onProgress(88)
             extractTarBz2(tarFile, dir)
-            onProgress(96)
+            onProgress(94)
             try { tarFile.delete() } catch (_: Exception) {}
+            onProgress(96)
             flatten(dir)
-            onProgress(99)
+            onProgress(98)
             if (!isReady(context)) {
-                lastError = "استخراج Whisper ناقص بود"
+                // list what we got for debug
+                val names = dir.listFiles()?.joinToString { it.name } ?: "empty"
+                lastError = "استخراج ناقص: $names"
                 throw IllegalStateException(lastError)
             }
             onProgress(100)

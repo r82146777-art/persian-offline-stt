@@ -134,8 +134,7 @@ class MainActivity : AppCompatActivity() {
                 prefs.edit().putString(KEY_LANG, currentLang).apply()
                 updateLangBadge()
                 Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
-                ShenavaEngine.release()
-        WhisperEngine.release()
+                WhisperEngine.release()
                 
                 
                 prepareModel()
@@ -202,20 +201,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun prepareModel() {
-        if (ShenavaEngine.isReady(this) || WhisperEngine.isReady(this)) {
+        if (WhisperEngine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
-                    var a = false; var b = false
-                    try { if (ShenavaEngine.isReady(this@MainActivity)) a = ShenavaEngine.load(this@MainActivity) } catch (_: Throwable) {}
-                    try { if (WhisperEngine.isReady(this@MainActivity)) b = WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) {}
-                    a || b
+                    try { WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — Shenava + Whisper"
+                        binding.status.text = "آماده — موتور Whisper"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا بارگذاری مدل"
+                        binding.status.text = "خطا بارگذاری: ${WhisperEngine.lastError}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -223,8 +219,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور Shenava Koochik")
-            .setMessage("برای تشخیص بهتر فارسی دو موتور (~۳۵۰ مگابایت: Shenava + Whisper) دانلود می‌شود.\n\nآیا همین الان دانلود شود؟")
+            .setTitle("دانلود موتور Whisper")
+            .setMessage("برای تشخیص صوتی آفلاین باید موتور Whisper (~۳۰۰ مگابایت) از GitHub دانلود شود.\n\nآیا همین الان دانلود شود؟")
             .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
             .setNegativeButton("لغو") { _, _ ->
                 binding.status.text = "دانلود لغو شد — برای فعال‌سازی دوباره برنامه را باز کنید"
@@ -240,54 +236,46 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود موتور Shenava Koochik…"
+                binding.status.text = "دانلود Whisper…"
                 withContext(Dispatchers.IO) {
-                    ShenavaEngine.ensureModel(this@MainActivity) { pct ->
-                        runOnUiThread {
-                            if (!isFinishing && !isDestroyed) {
-                                binding.progress.progress = (pct * 45) / 100
-                                binding.status.text = "دانلود Shenava $pct%"
-                            }
-                        }
-                    }
                     WhisperEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
-                                binding.progress.progress = 45 + (pct * 45) / 100
-                                binding.status.text = "دانلود Whisper $pct%"
+                                binding.progress.progress = pct
+                                binding.status.text = when {
+                                    pct < 86 -> "دانلود Whisper $pct%"
+                                    pct < 100 -> "استخراج و آماده‌سازی $pct%"
+                                    else -> "تمام شد"
+                                }
                             }
                         }
                     }
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "در حال بارگذاری موتورها…"
+                binding.status.text = "در حال بارگذاری موتور…"
                 val ok = withContext(Dispatchers.IO) {
-                    var a = false
-                    var b = false
-                    try { a = ShenavaEngine.load(this@MainActivity) } catch (_: Throwable) {}
-                    try { b = WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) {}
-                    a || b
+                    try { WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) { false }
                 }
                 if (isFinishing || isDestroyed) return@launch
                 if (ok) {
-                    binding.status.text = "آماده — Shenava + Whisper"
+                    binding.status.text = "آماده — موتور Whisper"
                     binding.progress.visibility = android.view.View.GONE
                     binding.micButton.isEnabled = true
                 } else {
-                    val err = ShenavaEngine.lastError.ifBlank { "بارگذاری ناموفق" }
+                    val err = WhisperEngine.lastError.ifBlank { "بارگذاری ناموفق" }
                     binding.status.text = "خطا: $err"
                     binding.progress.visibility = android.view.View.GONE
                     binding.micButton.isEnabled = false
                     Toast.makeText(this@MainActivity, err, Toast.LENGTH_LONG).show()
                 }
-            } catch (_: OutOfMemoryError) {
+            } catch (e: java.net.UnknownHostException) {
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "حافظه کافی نیست — برنامه را ببندید و دوباره باز کنید"
+                binding.status.text = "اینترنت/DNS قطع — github.com را چک کنید"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = false
             } catch (e: Exception) {
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "خطا: ${e.message ?: ShenavaEngine.lastError}"
+                binding.status.text = "خطا: ${e.message ?: WhisperEngine.lastError}"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = false
             }
@@ -296,7 +284,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!ShenavaEngine.isReady(this) && !WhisperEngine.isReady(this)) {
+        if (!WhisperEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -371,11 +359,11 @@ class MainActivity : AppCompatActivity() {
                     binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — Shenava + Whisper"
+                    binding.status.text = "آماده — موتور Whisper"
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — Shenava + Whisper"
+                        binding.status.text = "آماده — موتور Whisper"
                     }
                 }, 2500)
             }
@@ -408,7 +396,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopListening()
-        ShenavaEngine.release()
         WhisperEngine.release()
         
         super.onDestroy()

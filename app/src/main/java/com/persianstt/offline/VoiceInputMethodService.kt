@@ -95,7 +95,7 @@ class VoiceInputMethodService : InputMethodService() {
             setPadding(4, 6, 4, 6)
         }
         statusView = TextView(this).apply {
-            text = "آفلاین تایپ — موتور Shenava Koochik · فشار طولانی فاصله = صوت"
+            text = "آفلاین تایپ — موتور Whisper · فشار طولانی فاصله = صوت"
             setTextColor(SUB); textSize = 11f; setPadding(12, 2, 12, 4); gravity = Gravity.CENTER
         }
         root.addView(statusView, lpMW())
@@ -157,7 +157,7 @@ class VoiceInputMethodService : InputMethodService() {
         showClipboard = !showClipboard
         clipboardPanel?.visibility = if (showClipboard) View.VISIBLE else View.GONE
         if (showClipboard) { saveCurrentClipboard(); renderClipboard(); statusView?.text = "کلیپ‌بورد — ضربه = جایگذاری" }
-        else statusView?.text = "آفلاین تایپ — موتور Shenava Koochik · فشار طولانی فاصله = صوت"
+        else statusView?.text = "آفلاین تایپ — موتور Whisper · فشار طولانی فاصله = صوت"
     }
 
     private fun renderClipboard() {
@@ -290,7 +290,7 @@ class VoiceInputMethodService : InputMethodService() {
     private fun startVoice() {
         if (isListening) return
         isListening = true; pcmChunks.clear()
-        statusView?.text = "🎤 در حال گوش دادن… (موتور Shenava Koochik)"
+        statusView?.text = "🎤 در حال گوش دادن… (موتور Whisper)"
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         audioRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf * 2)
@@ -313,7 +313,7 @@ class VoiceInputMethodService : InputMethodService() {
             audioRecord = null
         }
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 60) } catch (_: Exception) {}
-        statusView?.text = "در حال تشخیص با Shenava…"
+        statusView?.text = "در حال تشخیص…"
         scope.launch(Dispatchers.IO) {
             val raw = pcmChunks.flatMap { it.toList() }.toShortArray(); pcmChunks.clear()
             val (text0, engine) = DualAsr.transcribe(this@VoiceInputMethodService, raw, SAMPLE_RATE)
@@ -325,7 +325,7 @@ class VoiceInputMethodService : InputMethodService() {
                     statusView?.text = "✓ [$engine ${"%.1f".format(secs)}s] $text"
                 } else statusView?.text = "چیزی تشخیص داده نشد (${"%.1f".format(secs)}s صدا=$engine)"
                 mainHandler.postDelayed({
-                    statusView?.text = "آفلاین تایپ — موتور Shenava Koochik · فشار طولانی فاصله = صوت"
+                    statusView?.text = "آفلاین تایپ — موتور Whisper · فشار طولانی فاصله = صوت"
                 }, 2500)
             }
         }
@@ -336,10 +336,9 @@ class VoiceInputMethodService : InputMethodService() {
         saveCurrentClipboard()
         scope.launch(Dispatchers.IO) {
             try {
-                if (!ShenavaEngine.isReady(this@VoiceInputMethodService)) {
-                    ShenavaEngine.ensureModel(this@VoiceInputMethodService)
+                if (WhisperEngine.isReady(this@VoiceInputMethodService)) {
+                    WhisperEngine.load(this@VoiceInputMethodService, "fa")
                 }
-                ShenavaEngine.load(this@VoiceInputMethodService)
             } catch (_: Exception) {}
         }
     }
