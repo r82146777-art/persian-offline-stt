@@ -54,7 +54,7 @@ class VoiceInputMethodService : InputMethodService() {
 
     companion object {
         private const val SAMPLE_RATE = 16000
-        private const val LONG_PRESS_MS = 450L
+        private const val LONG_PRESS_MS = 550L
         private const val PREFS = "hamdel_stt"
         private const val KEY_CLIPBOARD = "clipboard_history"
         private const val MAX_CLIPS = 20
@@ -75,6 +75,7 @@ class VoiceInputMethodService : InputMethodService() {
     private val SYM3 = listOf("\"", "'", ",", ".", "/", "\\", "؟", "،", "؛", "«")
 
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { saveCurrentClipboard() }
+    private val longPress = Runnable { if (!isListening) startVoice() else stopVoice() }
 
     override fun onCreate() {
         super.onCreate()
@@ -94,7 +95,7 @@ class VoiceInputMethodService : InputMethodService() {
             setPadding(4, 6, 4, 6)
         }
         statusView = TextView(this).apply {
-            text = "آفلاین تایپ — کلیپ‌بورد · فشار طولانی فاصله = صوت"
+            text = "آفلاین تایپ — موتور Shenava · فشار طولانی فاصله = صوت"
             setTextColor(SUB); textSize = 11f; setPadding(12, 2, 12, 4); gravity = Gravity.CENTER
         }
         root.addView(statusView, lpMW())
@@ -156,14 +157,14 @@ class VoiceInputMethodService : InputMethodService() {
         showClipboard = !showClipboard
         clipboardPanel?.visibility = if (showClipboard) View.VISIBLE else View.GONE
         if (showClipboard) { saveCurrentClipboard(); renderClipboard(); statusView?.text = "کلیپ‌بورد — ضربه = جایگذاری" }
-        else statusView?.text = "آفلاین تایپ — کلیپ‌بورد · فشار طولانی فاصله = صوت"
+        else statusView?.text = "آفلاین تایپ — موتور Shenava · فشار طولانی فاصله = صوت"
     }
 
     private fun renderClipboard() {
         val panel = clipboardPanel ?: return
         panel.removeAllViews()
         panel.addView(TextView(this).apply {
-            text = "تاریخچه کلیپ‌بورد (ضربه = جایگذاری · فشار طولانی = حذف)"
+            text = "تاریخچه کلیپ‌بورد (ضربه = جایگذاری)"
             setTextColor(ACCENT); textSize = 12f; setPadding(8, 4, 8, 8); gravity = Gravity.CENTER
         }, lpMW())
         val clips = loadClips()
@@ -185,18 +186,12 @@ class VoiceInputMethodService : InputMethodService() {
                 setOnClickListener {
                     commitText(item); playClick(); showClipboard = false
                     clipboardPanel?.visibility = View.GONE; statusView?.text = "جایگذاری شد ✓"
-                    mainHandler.postDelayed({ statusView?.text = "آفلاین تایپ — کلیپ‌بورد · فشار طولانی فاصله = صوت" }, 1500)
                 }
                 setOnLongClickListener {
                     val u = loadClips().toMutableList(); u.remove(item); saveClips(u); renderClipboard(); playClick(); true
                 }
             })
         }
-        list.addView(Button(this).apply {
-            text = "پاک کردن همه"; textSize = 12f; setTextColor(0xFFFF6B6B.toInt()); setBackgroundColor(KEY_BG_SP); isAllCaps = false
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 80).apply { setMargins(4, 8, 4, 4) }
-            setOnClickListener { saveClips(emptyList()); renderClipboard(); playClick() }
-        })
         scroll.addView(list); panel.addView(scroll)
     }
 
@@ -230,13 +225,20 @@ class VoiceInputMethodService : InputMethodService() {
         row.addView(makeKey(lab, 1.3f, true) { currentLayer = (currentLayer + 1) % 3; rebuildKeys() })
         row.addView(makeKey("،", 0.8f) { commitText("،") })
         row.addView(makeKey(".", 0.8f) { commitText(".") })
-        val space = makeKey("فاصله", 3.5f) { commitText(" ") }
+        val space = makeKey("فاصله", 3.8f) { }
+        val spaceState = booleanArrayOf(false)
+        val spaceLong = Runnable { spaceState[0] = true; longPress.run() }
         space.setOnTouchListener { v, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { v.isPressed = true; mainHandler.postDelayed(longPress, LONG_PRESS_MS); true }
+                MotionEvent.ACTION_DOWN -> {
+                    spaceState[0] = false; v.isPressed = true
+                    mainHandler.postDelayed(spaceLong, LONG_PRESS_MS); true
+                }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    mainHandler.removeCallbacks(longPress); v.isPressed = false
-                    if (e.eventTime - e.downTime < LONG_PRESS_MS) { commitText(" "); playClick() }
+                    mainHandler.removeCallbacks(spaceLong); v.isPressed = false
+                    if (!spaceState[0] && e.action == MotionEvent.ACTION_UP) {
+                        commitText(" "); playClick()
+                    }
                     true
                 }
                 else -> false
@@ -250,15 +252,13 @@ class VoiceInputMethodService : InputMethodService() {
         parent.addView(row)
     }
 
-    private val longPress = Runnable { if (!isListening) startVoice() else stopVoice() }
-
     private fun makeKey(label: String, w: Float, special: Boolean = false, onTap: () -> Unit) = Button(this).apply {
         text = label; textSize = if (label.length > 2) 13f else 17f; setTextColor(TEXT)
         setBackgroundColor(if (special) KEY_BG_SP else KEY_BG); isAllCaps = false
         layoutParams = LinearLayout.LayoutParams(0, 100, w).apply { setMargins(3, 3, 3, 3) }
         setOnClickListener { onTap(); playClick() }
         contentDescription = when (label) {
-            "فاصله" -> "فاصله — فشار طولانی برای تایپ صوتی آفلاین"
+            "فاصله" -> "فاصله — فشار طولانی برای تایپ صوتی"
             "⌫" -> "پاک کردن"; "↵" -> "ورود"; "⇧" -> "شیفت"; else -> label
         }
     }
@@ -275,7 +275,8 @@ class VoiceInputMethodService : InputMethodService() {
     private fun playClick() {
         if (prefs.getBoolean("key_sound", true)) try { toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 30) } catch (_: Exception) {}
         if (prefs.getBoolean("key_vibe", true)) try {
-            if (android.os.Build.VERSION.SDK_INT >= 26) vibrator?.vibrate(VibrationEffect.createOneShot(15, VibrationEffect.DEFAULT_AMPLITUDE))
+            if (android.os.Build.VERSION.SDK_INT >= 26)
+                vibrator?.vibrate(VibrationEffect.createOneShot(15, VibrationEffect.DEFAULT_AMPLITUDE))
             else { @Suppress("DEPRECATION") vibrator?.vibrate(15) }
         } catch (_: Exception) {}
     }
@@ -283,7 +284,7 @@ class VoiceInputMethodService : InputMethodService() {
     private fun startVoice() {
         if (isListening) return
         isListening = true; pcmChunks.clear()
-        statusView?.text = "🎤 در حال گوش دادن… (دوباره برای توقف)"
+        statusView?.text = "🎤 در حال گوش دادن… (موتور Shenava)"
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         audioRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf * 2)
@@ -306,24 +307,35 @@ class VoiceInputMethodService : InputMethodService() {
             audioRecord = null
         }
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 60) } catch (_: Exception) {}
-        statusView?.text = "در حال تشخیص…"
+        statusView?.text = "در حال تشخیص با Shenava…"
         scope.launch(Dispatchers.IO) {
             val all = pcmChunks.flatMap { it.toList() }.toShortArray(); pcmChunks.clear()
             var text = ""
             try {
-                if (VoskEngine.isAnyReady(this@VoiceInputMethodService)) {
-                    VoskEngine.load(this@VoiceInputMethodService, "fa")
-                    text = VoskEngine.transcribe(all, SAMPLE_RATE)
+                // 1) Shenava Rizeh — strongest Persian
+                if (ShenavaEngine.isReady(this@VoiceInputMethodService)) {
+                    ShenavaEngine.load(this@VoiceInputMethodService)
+                    text = ShenavaEngine.transcribe(all, SAMPLE_RATE)
                 }
+                // 2) Whisper
                 if (text.length < 2 && WhisperEngine.isReady(this@VoiceInputMethodService)) {
                     WhisperEngine.load(this@VoiceInputMethodService, "fa")
                     text = WhisperEngine.transcribe(all, SAMPLE_RATE)
                 }
+                // 3) Vosk fallback
+                if (text.length < 2 && VoskEngine.isAnyReady(this@VoiceInputMethodService)) {
+                    VoskEngine.load(this@VoiceInputMethodService, "fa")
+                    text = VoskEngine.transcribe(all, SAMPLE_RATE)
+                }
             } catch (_: Exception) {}
             withContext(Dispatchers.Main) {
-                if (text.isNotBlank()) { currentInputConnection?.commitText(text + " ", 1); statusView?.text = "✓ $text" }
-                else statusView?.text = "چیزی تشخیص داده نشد — دوباره امتحان کنید"
-                mainHandler.postDelayed({ statusView?.text = "آفلاین تایپ — کلیپ‌بورد · فشار طولانی فاصله = صوت" }, 2500)
+                if (text.isNotBlank()) {
+                    currentInputConnection?.commitText(text + " ", 1)
+                    statusView?.text = "✓ $text"
+                } else statusView?.text = "چیزی تشخیص داده نشد"
+                mainHandler.postDelayed({
+                    statusView?.text = "آفلاین تایپ — موتور Shenava · فشار طولانی فاصله = صوت"
+                }, 2500)
             }
         }
     }
@@ -333,8 +345,10 @@ class VoiceInputMethodService : InputMethodService() {
         saveCurrentClipboard()
         scope.launch(Dispatchers.IO) {
             try {
-                if (!VoskEngine.isAnyReady(this@VoiceInputMethodService)) VoskEngine.ensureModels(this@VoiceInputMethodService)
-                VoskEngine.load(this@VoiceInputMethodService, "fa")
+                if (!ShenavaEngine.isReady(this@VoiceInputMethodService)) {
+                    ShenavaEngine.ensureModel(this@VoiceInputMethodService)
+                }
+                ShenavaEngine.load(this@VoiceInputMethodService)
             } catch (_: Exception) {}
         }
     }
