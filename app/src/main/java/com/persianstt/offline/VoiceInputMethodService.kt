@@ -327,7 +327,6 @@ class VoiceInputMethodService : InputMethodService() {
                         if (text.isNotBlank()) engine = "Koochik"
                     }
                 }
-                                }
             } catch (e: Exception) {
                 engine = "err:" + (e.message ?: "?")
             }
