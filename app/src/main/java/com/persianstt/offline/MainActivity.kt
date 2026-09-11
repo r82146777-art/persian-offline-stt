@@ -137,6 +137,7 @@ class MainActivity : AppCompatActivity() {
                 prefs.edit().putString(KEY_LANG, currentLang).apply()
                 updateLangBadge()
                 Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
+                ShenavaEngine.release()
                 VoskEngine.release()
                 WhisperEngine.release()
                 prepareModel()
@@ -159,30 +160,55 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun prepareModel() {
+        if (ShenavaEngine.isReady(this)) {
+            lifecycleScope.launch {
+                withContext(Dispatchers.IO) {
+                    ShenavaEngine.load(this@MainActivity)
+                    try { VoskEngine.load(this@MainActivity, currentLang) } catch (_: Exception) {}
+                }
+                if (!isFinishing && !isDestroyed) {
+                    binding.status.text = "آماده — موتور Shenava (فارسی قوی)"
+                    binding.micButton.isEnabled = true
+                }
+            }
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("دانلود موتور قوی Shenava")
+            .setMessage("برای تشخیص دقیق فارسی و اعداد باید موتور Shenava (~۳۷ مگابایت) دانلود شود.\n\nآیا می‌خواهید همین الان دانلود شود؟")
+            .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
+            .setNegativeButton("لغو") { _, _ ->
+                binding.status.text = "دانلود لغو شد — برای فعال‌سازی دوباره برنامه را باز کنید"
+                binding.micButton.isEnabled = false
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun startModelDownload() {
         lifecycleScope.launch {
             try {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود مدل Vosk فارسی…"
+                binding.status.text = "دانلود موتور Shenava…"
                 withContext(Dispatchers.IO) {
-                    VoskEngine.ensureModels(this@MainActivity) { pct ->
+                    ShenavaEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
-                                binding.status.text = "دانلود مدل $pct%"
+                                binding.status.text = "دانلود Shenava $pct%"
                             }
                         }
                     }
-                    VoskEngine.load(this@MainActivity, currentLang)
+                    ShenavaEngine.load(this@MainActivity)
                     try {
-                        if (!WhisperEngine.isReady(this@MainActivity)) {
-                            WhisperEngine.ensureModel(this@MainActivity) {}
-                        }
+                        VoskEngine.ensureModels(this@MainActivity) {}
+                        VoskEngine.load(this@MainActivity, currentLang)
                     } catch (_: Exception) {}
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "آماده — موتور Vosk آفلاین (فارسی)"
+                binding.status.text = "آماده — موتور Shenava (فارسی قوی)"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = true
             } catch (e: Exception) {
@@ -196,7 +222,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!VoskEngine.isAnyReady(this) && !WhisperEngine.isReady(this)) {
+        if (!ShenavaEngine.isReady(this) && !VoskEngine.isAnyReady(this) && !WhisperEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -263,20 +289,20 @@ class MainActivity : AppCompatActivity() {
             var text = ""
             if (pcm.size >= SAMPLE_RATE / 2) {
                 try {
-                    if (currentLang == LANG_FA) {
-                        VoskEngine.load(this@MainActivity, "fa")
+                    // 1) Shenava — strongest Persian
+                    if (ShenavaEngine.isReady(this@MainActivity)) {
+                        ShenavaEngine.load(this@MainActivity)
+                        text = ShenavaEngine.transcribe(pcm, SAMPLE_RATE)
+                    }
+                    // 2) Vosk fallback
+                    if (text.length < 2 && VoskEngine.isAnyReady(this@MainActivity)) {
+                        VoskEngine.load(this@MainActivity, currentLang)
                         text = VoskEngine.transcribe(pcm, SAMPLE_RATE)
-                        if (text.length < 2) {
-                            WhisperEngine.load(this@MainActivity, "fa")
-                            text = WhisperEngine.transcribe(pcm, SAMPLE_RATE)
-                        }
-                    } else {
-                        WhisperEngine.load(this@MainActivity, "en")
+                    }
+                    // 3) Whisper fallback
+                    if (text.length < 2 && WhisperEngine.isReady(this@MainActivity)) {
+                        WhisperEngine.load(this@MainActivity, if (currentLang == LANG_EN) "en" else "fa")
                         text = WhisperEngine.transcribe(pcm, SAMPLE_RATE)
-                        if (text.length < 2) {
-                            VoskEngine.load(this@MainActivity, "en")
-                            text = VoskEngine.transcribe(pcm, SAMPLE_RATE)
-                        }
                     }
                 } catch (_: Exception) {}
             }
@@ -290,7 +316,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
                 }
-                binding.status.text = "آماده — موتور Vosk آفلاین"
+                binding.status.text = "آماده — موتور Shenava (فارسی قوی)"
             }
         }
     }
@@ -321,6 +347,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopListening()
+        ShenavaEngine.release()
         VoskEngine.release()
         WhisperEngine.release()
         super.onDestroy()
