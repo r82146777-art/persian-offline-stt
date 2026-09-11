@@ -207,15 +207,15 @@ class MainActivity : AppCompatActivity() {
                     ShenavaEngine.load(this@MainActivity)
                 }
                 if (!isFinishing && !isDestroyed) {
-                    binding.status.text = "آماده — موتور Shenava Koochik — فقط فارسی قوی"
+                    binding.status.text = "آماده — موتور Shenava Koochik Full Full (قوی‌تر)"
                     binding.micButton.isEnabled = true
                 }
             }
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور قوی Shenava Koochik")
-            .setMessage("برای تشخیص دقیق فارسی و اعداد باید موتور Shenava Koochik (~۱۰۰ مگابایت) دانلود شود.\n\nآیا می‌خواهید همین الان دانلود شود؟")
+            .setTitle("دانلود موتور بزرگ Shenava Koochik Full")
+            .setMessage("برای تشخیص دقیق فارسی و اعداد باید موتور Shenava Koochik Full Full (~۴۱۵ مگابایت) دانلود شود.\n\nآیا می‌خواهید همین الان دانلود شود؟")
             .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
             .setNegativeButton("لغو") { _, _ ->
                 binding.status.text = "دانلود لغو شد — برای فعال‌سازی دوباره برنامه را باز کنید"
@@ -231,13 +231,13 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود موتور Shenava Koochik…"
+                binding.status.text = "دانلود موتور Shenava Koochik Full…"
                 withContext(Dispatchers.IO) {
                     ShenavaEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
-                                binding.status.text = "دانلود Koochik $pct%"
+                                binding.status.text = "دانلود Koochik Full $pct%"
                             }
                         }
                     }
@@ -245,7 +245,7 @@ class MainActivity : AppCompatActivity() {
                     
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "آماده — موتور Shenava Koochik — فقط فارسی قوی"
+                binding.status.text = "آماده — موتور Shenava Koochik Full Full (قوی‌تر)"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = true
             } catch (e: Exception) {
@@ -347,7 +347,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
                 }
-                binding.status.text = "آماده — موتور Shenava Koochik — فقط فارسی قوی"
+                binding.status.text = "آماده — موتور Shenava Koochik Full Full (قوی‌تر)"
             }
         }
     }
