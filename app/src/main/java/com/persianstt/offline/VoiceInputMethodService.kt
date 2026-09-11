@@ -327,16 +327,7 @@ class VoiceInputMethodService : InputMethodService() {
                         if (text.isNotBlank()) engine = "Koochik"
                     }
                 }
-                if (text.length < 2 && WhisperEngine.isReady(this@VoiceInputMethodService)) {
-                    WhisperEngine.load(this@VoiceInputMethodService, "fa")
-                    text = WhisperEngine.transcribe(all, SAMPLE_RATE)
-                    if (text.isNotBlank()) engine = "Whisper"
-                }
-                if (text.length < 2 && VoskEngine.isAnyReady(this@VoiceInputMethodService)) {
-                    VoskEngine.load(this@VoiceInputMethodService, "fa")
-                    text = VoskEngine.transcribe(all, SAMPLE_RATE)
-                    if (text.isNotBlank()) engine = "Vosk"
-                }
+                                }
             } catch (e: Exception) {
                 engine = "err:" + (e.message ?: "?")
             }

@@ -135,8 +135,8 @@ class MainActivity : AppCompatActivity() {
                 updateLangBadge()
                 Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
                 ShenavaEngine.release()
-                VoskEngine.release()
-                WhisperEngine.release()
+                
+                
                 prepareModel()
             }.show()
     }
@@ -205,10 +205,9 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 withContext(Dispatchers.IO) {
                     ShenavaEngine.load(this@MainActivity)
-                    try { VoskEngine.load(this@MainActivity, currentLang) } catch (_: Exception) {}
                 }
                 if (!isFinishing && !isDestroyed) {
-                    binding.status.text = "آماده — موتور Shenava Koochik (فارسی قوی)"
+                    binding.status.text = "آماده — موتور Shenava Koochik — فقط فارسی قوی"
                     binding.micButton.isEnabled = true
                 }
             }
@@ -243,13 +242,10 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     ShenavaEngine.load(this@MainActivity)
-                    try {
-                        VoskEngine.ensureModels(this@MainActivity) {}
-                        VoskEngine.load(this@MainActivity, currentLang)
-                    } catch (_: Exception) {}
+                    
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "آماده — موتور Shenava Koochik (فارسی قوی)"
+                binding.status.text = "آماده — موتور Shenava Koochik — فقط فارسی قوی"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = true
             } catch (e: Exception) {
@@ -263,7 +259,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!ShenavaEngine.isReady(this) && !VoskEngine.isAnyReady(this) && !WhisperEngine.isReady(this)) {
+        if (!ShenavaEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -335,16 +331,8 @@ class MainActivity : AppCompatActivity() {
                     if (ShenavaEngine.isReady(this@MainActivity)) {
                         ShenavaEngine.load(this@MainActivity)
                         text = ShenavaEngine.transcribe(prepared, SAMPLE_RATE)
-                    }
-                    // 2) Vosk fallback
-                    if (text.length < 2 && VoskEngine.isAnyReady(this@MainActivity)) {
-                        VoskEngine.load(this@MainActivity, currentLang)
-                        text = VoskEngine.transcribe(prepared, SAMPLE_RATE)
-                    }
-                    // 3) Whisper fallback
-                    if (text.length < 2 && WhisperEngine.isReady(this@MainActivity)) {
-                        WhisperEngine.load(this@MainActivity, if (currentLang == LANG_EN) "en" else "fa")
-                        text = WhisperEngine.transcribe(prepared, SAMPLE_RATE)
+                    } else {
+                        text = ""
                     }
                 } catch (_: Exception) {}
             }
@@ -359,7 +347,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
                 }
-                binding.status.text = "آماده — موتور Shenava Koochik (فارسی قوی)"
+                binding.status.text = "آماده — موتور Shenava Koochik — فقط فارسی قوی"
             }
         }
     }
@@ -391,8 +379,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         stopListening()
         ShenavaEngine.release()
-        VoskEngine.release()
-        WhisperEngine.release()
+        
         super.onDestroy()
     }
 

@@ -54,8 +54,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.2.4
-          name: "v3.2.4 - fix dictation mic permission + stronger text repair"
+          tag_name: v3.3.0
+          name: "v3.3.0 - Shenava only, no Vosk/Whisper, dictation process fix"
           body: |
             ## نسخه ۳.۲.۰
             * دیکته صوتی سیستم (RecognitionService) — قابل انتخاب به‌جای گوگل

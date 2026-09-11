@@ -50,6 +50,8 @@ object PersianPostProcess {
     fun fix(raw: String): String {
         if (raw.isBlank()) return raw
         var t = raw.trim()
+        // first: collapse "letter space letter" patterns repeatedly for CTC
+        t = collapseMidWordSpaces(t)
         // remove trailing junk single letters often added by CTC
         t = t.replace(Regex("""[\s،.]*[آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهیءئ]{1}[\s.]*$"""), "")
         t = t.replace(Regex("""می\s*کنید"""), "می‌کنید")
@@ -97,6 +99,19 @@ object PersianPostProcess {
             i++
         }
         return out.joinToString(" ")
+    }
+
+
+    private fun collapseMidWordSpaces(text: String): String {
+        var s = text
+        // repeatedly glue single persian letter + space + single letter
+        val re = Regex("""([آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهیءئ])\s+([آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهیءئ])""")
+        var prev = ""
+        while (prev != s) {
+            prev = s
+            s = re.replace(s, "$1$2")
+        }
+        return s
     }
 
     private fun isPersianWord(s: String): Boolean {
