@@ -54,15 +54,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.1.0
-          name: "v3.1.0 - Shenava Koochik قوی + اعداد + تنظیمات صدا"
+          tag_name: v3.2.0
+          name: "v3.2.0 - دیکته سیستم + صدای واقعی + پیش‌پردازش"
           body: |
-            ## نسخه ۳.۱.۰ — موتور پرچمدار
-            * موتور اصلی: **Shenava Koochik** (۱۱۴M — دقت خیلی بالاتر)
-            * نرمال‌سازی قوی اعداد فارسی (هزار و سیصد → 1300)
-            * دانلود پایدار با resume (گیر نمی‌کند)
-            * تنظیمات صدا: چند افکت + بلندی صدا + ویبره
-            * پشتیبان: Vosk + Whisper
+            ## نسخه ۳.۲.۰
+            * دیکته صوتی سیستم (RecognitionService) — قابل انتخاب به‌جای گوگل
+            * ۵ افکت صدای واقعاً متفاوت (کلیک/تیک/پاپ/شاتر/گیتار)
+            * پیش‌پردازش صدا قبل از تشخیص (حذف سکوت + نرمال)
+            * موتور Shenava Koochik + اعداد
             * بار اول مدل (~۱۰۰ مگ) را دانلود کنید
           files: app/build/outputs/apk/debug/*.apk
           draft: false

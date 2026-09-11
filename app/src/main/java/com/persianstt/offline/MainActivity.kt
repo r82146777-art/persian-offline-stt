@@ -139,7 +139,7 @@ class MainActivity : AppCompatActivity() {
         val vibeOn = prefs.getBoolean(KEY_VIBE, true)
         val volume = prefs.getInt("sound_volume", 60)
         val effect = prefs.getInt("sound_effect", 0)
-        val effectNames = arrayOf("بیپ کلاسیک", "تیک کوتاه", "کلیک نرم", "بوق تأیید", "آلارم کوتاه")
+        val effectNames = arrayOf("کلیک سامسونگ", "تیک نرم", "پاپ", "شاتر دوربین", "گیتار")
         val status = buildString {
             append("صدا: "); append(if (soundOn) "روشن" else "خاموش")
             append("  |  ویبره: "); append(if (vibeOn) "روشن" else "خاموش")
@@ -162,24 +162,14 @@ class MainActivity : AppCompatActivity() {
                     .setTitle("انتخاب افکت صدا")
                     .setItems(effectNames) { _, which ->
                         prefs.edit().putInt("sound_effect", which).apply()
-                        val tones = intArrayOf(
-                            android.media.ToneGenerator.TONE_PROP_BEEP,
-                            android.media.ToneGenerator.TONE_PROP_BEEP2,
-                            android.media.ToneGenerator.TONE_CDMA_PIP,
-                            android.media.ToneGenerator.TONE_PROP_ACK,
-                            android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
-                        )
-                        try {
-                            val tg = android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, volume)
-                            tg.startTone(tones[which], 50)
-                            tg.release()
-                        } catch (_: Exception) {}
-                        // volume picker after effect
+                        KeySoundPlayer.play(this, which, volume)
                         val levels = arrayOf("۲۰٪", "۴۰٪", "۶۰٪", "۸۰٪", "۱۰۰٪")
                         MaterialAlertDialogBuilder(this)
                             .setTitle("میزان بلندی صدا")
                             .setItems(levels) { _, w ->
-                                prefs.edit().putInt("sound_volume", (w + 1) * 20).apply()
+                                val v = (w + 1) * 20
+                                prefs.edit().putInt("sound_volume", v).apply()
+                                KeySoundPlayer.play(this, which, v)
                                 Toast.makeText(this, "افکت: ${effectNames[which]} — ${levels[w]}", Toast.LENGTH_SHORT).show()
                             }.show()
                     }.show()
@@ -330,22 +320,23 @@ class MainActivity : AppCompatActivity() {
                 o += c.size
             }
             var text = ""
-            if (pcm.size >= SAMPLE_RATE / 2) {
+            val prepared = AudioPreprocessor.prepare(pcm, SAMPLE_RATE)
+            if (prepared.size >= SAMPLE_RATE / 2) {
                 try {
                     // 1) Shenava — strongest Persian
                     if (ShenavaEngine.isReady(this@MainActivity)) {
                         ShenavaEngine.load(this@MainActivity)
-                        text = ShenavaEngine.transcribe(pcm, SAMPLE_RATE)
+                        text = ShenavaEngine.transcribe(prepared, SAMPLE_RATE)
                     }
                     // 2) Vosk fallback
                     if (text.length < 2 && VoskEngine.isAnyReady(this@MainActivity)) {
                         VoskEngine.load(this@MainActivity, currentLang)
-                        text = VoskEngine.transcribe(pcm, SAMPLE_RATE)
+                        text = VoskEngine.transcribe(prepared, SAMPLE_RATE)
                     }
                     // 3) Whisper fallback
                     if (text.length < 2 && WhisperEngine.isReady(this@MainActivity)) {
                         WhisperEngine.load(this@MainActivity, if (currentLang == LANG_EN) "en" else "fa")
-                        text = WhisperEngine.transcribe(pcm, SAMPLE_RATE)
+                        text = WhisperEngine.transcribe(prepared, SAMPLE_RATE)
                     }
                 } catch (_: Exception) {}
             }

@@ -274,22 +274,9 @@ class VoiceInputMethodService : InputMethodService() {
 
     private fun playClick() {
         if (prefs.getBoolean("key_sound", true)) {
-            try {
-                val vol = prefs.getInt("sound_volume", 60).coerceIn(10, 100)
-                val effect = prefs.getInt("sound_effect", 0)
-                val tones = intArrayOf(
-                    ToneGenerator.TONE_PROP_BEEP,
-                    ToneGenerator.TONE_PROP_BEEP2,
-                    ToneGenerator.TONE_CDMA_PIP,
-                    ToneGenerator.TONE_PROP_ACK,
-                    ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
-                )
-                val tone = tones.getOrElse(effect) { ToneGenerator.TONE_PROP_BEEP }
-                // recreate with volume so user setting applies
-                try { toneGen?.release() } catch (_: Exception) {}
-                toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, vol)
-                toneGen?.startTone(tone, 30)
-            } catch (_: Exception) {}
+            val vol = prefs.getInt("sound_volume", 60)
+            val effect = prefs.getInt("sound_effect", 0)
+            KeySoundPlayer.play(this, effect, vol)
         }
         if (prefs.getBoolean("key_vibe", true)) try {
             val strength = prefs.getInt("vibe_strength", 60).coerceIn(10, 100)
@@ -328,7 +315,8 @@ class VoiceInputMethodService : InputMethodService() {
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 60) } catch (_: Exception) {}
         statusView?.text = "در حال تشخیص با Shenava…"
         scope.launch(Dispatchers.IO) {
-            val all = pcmChunks.flatMap { it.toList() }.toShortArray(); pcmChunks.clear()
+            val raw = pcmChunks.flatMap { it.toList() }.toShortArray(); pcmChunks.clear()
+            val all = AudioPreprocessor.prepare(raw, SAMPLE_RATE)
             var text = ""
             try {
                 // 1) Shenava Rizeh — strongest Persian
