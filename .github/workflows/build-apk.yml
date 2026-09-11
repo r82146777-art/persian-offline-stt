@@ -36,9 +36,7 @@ jobs:
           curl -L --fail -o app/libs/sherpa-onnx.aar \
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.6/sherpa-onnx-1.12.6.aar" \
           || curl -L --fail -o app/libs/sherpa-onnx.aar \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.42/sherpa-onnx-1.10.42.aar" \
-          || curl -L --fail -o app/libs/sherpa-onnx.aar \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.40/sherpa-onnx-1.12.40.aar"
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.42/sherpa-onnx-1.10.42.aar"
           ls -lh app/libs/
 
       - name: Generate wrapper and build debug APK
@@ -56,15 +54,15 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.9.0
-          name: "v2.9.0 - Auto language + number fix + space bar"
+          tag_name: v3.0.0
+          name: "v3.0.0 - موتور قوی Shenava Rizeh (فارسی)"
           body: |
-            ## نسخه ۲.۹.۰
-            * اصلاح کامل اعداد (دیگر «میلیارد» به‌جای سال نمی‌نویسد)
-            * تشخیص خودکار زبان فارسی/انگلیسی (یک بسته، بدون نصب جدا)
-            * حساسیت بهتر دکمه فاصله
-            * کلیپ‌بورد داخل کیبورد
-            * تایپ صوتی آفلاین Vosk
+            ## نسخه ۳.۰.۰ — موتور جدید قوی
+            * موتور اصلی: **Shenava Rizeh** (مدل اختصاصی فارسی FastConformer)
+            * دقت خیلی بالاتر از Vosk روی فارسی
+            * پشتیبان: Whisper + Vosk
+            * بار اول مدل Shenava (~۳۷ مگ) را دانلود کنید
+            * کلیپ‌بورد + کیبورد RTL
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
