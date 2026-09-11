@@ -56,15 +56,15 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.8.0
-          name: "v2.8.0 - Clipboard like Samsung + offline voice"
+          tag_name: v2.9.0
+          name: "v2.9.0 - Auto language + number fix + space bar"
           body: |
-            ## نسخه ۲.۸.۰
-            * تاریخچه کلیپ‌بورد داخل کیبورد (مثل سامسونگ)
-            * دکمه 📋 کلیپ‌بورد + دکمه 🎤 صوت
-            * تایپ صوتی آفلاین با Vosk (بدون گوگل)
-            * اصلاح اعداد (سال ۱۳۸۱ دیگر میلیارد نمی‌شود)
-            * کیبورد RTL + تک‌ضربه
+            ## نسخه ۲.۹.۰
+            * اصلاح کامل اعداد (دیگر «میلیارد» به‌جای سال نمی‌نویسد)
+            * تشخیص خودکار زبان فارسی/انگلیسی (یک بسته، بدون نصب جدا)
+            * حساسیت بهتر دکمه فاصله
+            * کلیپ‌بورد داخل کیبورد
+            * تایپ صوتی آفلاین Vosk
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
