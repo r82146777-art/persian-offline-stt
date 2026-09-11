@@ -77,6 +77,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.dictationButton.setOnClickListener { showDictationHelp() }
+
+        // Opened from RecognitionService when mic permission missing
+        if (intent?.getBooleanExtra("request_mic", false) == true) {
+            ensureMicPermission()
+        }
         if (!prefs.getBoolean(KEY_HIDE_INVITE, false)) showInvite()
         prepareModel()
     }
@@ -419,6 +424,19 @@ class MainActivity : AppCompatActivity() {
             "تنظیمات پیدا نشد. دستی بروید: تنظیمات ← زبان ← ورودی صوتی",
             android.widget.Toast.LENGTH_LONG
         ).show()
+    }
+
+
+    private fun ensureMicPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            android.widget.Toast.makeText(this, "مجوز میکروفون از قبل داده شده", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        androidx.core.app.ActivityCompat.requestPermissions(
+            this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC
+        )
     }
 
 }

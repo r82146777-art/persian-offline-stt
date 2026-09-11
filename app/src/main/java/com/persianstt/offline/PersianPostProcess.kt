@@ -79,11 +79,11 @@ object PersianPostProcess {
         var i = 0
         while (i < parts.size) {
             val p = parts[i]
-            // start collecting short fragments
-            if (p.length <= 2 && isPersianWord(p)) {
+            // collect runs of short Persian fragments (CTC often splits words)
+            if (p.length <= 3 && isPersianWord(p)) {
                 val buf = StringBuilder(p)
                 var j = i + 1
-                while (j < parts.size && parts[j].length <= 2 && isPersianWord(parts[j]) && buf.length < 12) {
+                while (j < parts.size && parts[j].length <= 3 && isPersianWord(parts[j]) && buf.length < 16) {
                     buf.append(parts[j])
                     j++
                 }

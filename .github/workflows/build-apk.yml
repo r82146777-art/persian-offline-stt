@@ -54,8 +54,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.2.3
-          name: "v3.2.3 - system dictation selector + recognition service"
+          tag_name: v3.2.4
+          name: "v3.2.4 - fix dictation mic permission + stronger text repair"
           body: |
             ## نسخه ۳.۲.۰
             * دیکته صوتی سیستم (RecognitionService) — قابل انتخاب به‌جای گوگل
