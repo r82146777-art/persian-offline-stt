@@ -203,19 +203,24 @@ class MainActivity : AppCompatActivity() {
     private fun prepareModel() {
         if (ShenavaEngine.isReady(this)) {
             lifecycleScope.launch {
-                withContext(Dispatchers.IO) {
-                    ShenavaEngine.load(this@MainActivity)
+                val ok = withContext(Dispatchers.IO) {
+                    try { ShenavaEngine.load(this@MainActivity) } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
-                    binding.status.text = "آماده — موتور Shenava Koochik Full Full (قوی‌تر)"
-                    binding.micButton.isEnabled = true
+                    if (ok) {
+                        binding.status.text = "آماده — موتور Shenava Koochik"
+                        binding.micButton.isEnabled = true
+                    } else {
+                        binding.status.text = "خطا بارگذاری: ${ShenavaEngine.lastError}"
+                        binding.micButton.isEnabled = false
+                    }
                 }
             }
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور بزرگ Shenava Koochik Full")
-            .setMessage("برای تشخیص دقیق فارسی و اعداد باید موتور Shenava Koochik Full Full (~۴۱۵ مگابایت) دانلود شود.\n\nآیا می‌خواهید همین الان دانلود شود؟")
+            .setTitle("دانلود موتور Shenava Koochik")
+            .setMessage("برای تشخیص فارسی باید موتور (~۱۰۰ مگابایت) دانلود شود.\n\nآیا همین الان دانلود شود؟")
             .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
             .setNegativeButton("لغو") { _, _ ->
                 binding.status.text = "دانلود لغو شد — برای فعال‌سازی دوباره برنامه را باز کنید"
@@ -231,26 +236,48 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود موتور Shenava Koochik Full…"
+                binding.status.text = "دانلود موتور Shenava Koochik…"
                 withContext(Dispatchers.IO) {
                     ShenavaEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
-                                binding.status.text = "دانلود Koochik Full $pct%"
+                                binding.status.text = if (pct < 90) "دانلود $pct%" else "آماده‌سازی مدل $pct%"
                             }
                         }
                     }
-                    ShenavaEngine.load(this@MainActivity)
-                    
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "آماده — موتور Shenava Koochik Full Full (قوی‌تر)"
+                binding.status.text = "در حال بارگذاری موتور…"
+                val ok = withContext(Dispatchers.IO) {
+                    try {
+                        ShenavaEngine.load(this@MainActivity)
+                    } catch (_: OutOfMemoryError) {
+                        false
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+                if (isFinishing || isDestroyed) return@launch
+                if (ok) {
+                    binding.status.text = "آماده — موتور Shenava Koochik"
+                    binding.progress.visibility = android.view.View.GONE
+                    binding.micButton.isEnabled = true
+                } else {
+                    val err = ShenavaEngine.lastError.ifBlank { "بارگذاری ناموفق" }
+                    binding.status.text = "خطا: $err"
+                    binding.progress.visibility = android.view.View.GONE
+                    binding.micButton.isEnabled = false
+                    Toast.makeText(this@MainActivity, err, Toast.LENGTH_LONG).show()
+                }
+            } catch (_: OutOfMemoryError) {
+                if (isFinishing || isDestroyed) return@launch
+                binding.status.text = "حافظه کافی نیست — برنامه را ببندید و دوباره باز کنید"
                 binding.progress.visibility = android.view.View.GONE
-                binding.micButton.isEnabled = true
+                binding.micButton.isEnabled = false
             } catch (e: Exception) {
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "خطا: ${e.message}"
+                binding.status.text = "خطا: ${e.message ?: ShenavaEngine.lastError}"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = false
             }
@@ -347,7 +374,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
                 }
-                binding.status.text = "آماده — موتور Shenava Koochik Full Full (قوی‌تر)"
+                binding.status.text = "آماده — موتور Shenava Koochik (قوی‌تر)"
             }
         }
     }
