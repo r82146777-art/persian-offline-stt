@@ -90,6 +90,9 @@ object ShenavaEngine {
                 throw IllegalStateException(lastError)
             }
             onProgress(100)
+        } catch (e: java.net.UnknownHostException) {
+            lastError = "اینترنت یا DNS قطع است (github.com را چک کنید)"
+            throw e
         } catch (e: OutOfMemoryError) {
             lastError = "حافظه کافی نیست برای آماده‌سازی مدل"
             try { dir.deleteRecursively() } catch (_: Exception) {}
