@@ -211,7 +211,7 @@ object ShenavaEngine {
             stream.acceptWaveform(floats, sampleRate)
             r.decode(stream)
             val raw = r.getResult(stream).text.trim()
-            NumberNormalizer.normalize(raw)
+            NumberNormalizer.normalize(PersianPostProcess.fix(raw))
         } catch (_: Exception) {
             ""
         } finally {

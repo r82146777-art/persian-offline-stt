@@ -340,6 +340,7 @@ class VoiceInputMethodService : InputMethodService() {
             } catch (e: Exception) {
                 engine = "err:" + (e.message ?: "?")
             }
+            if (text.isNotBlank()) text = PersianPostProcess.fix(NumberNormalizer.normalize(text))
             val secs = all.size.toFloat() / SAMPLE_RATE
             withContext(Dispatchers.Main) {
                 if (text.isNotBlank()) {

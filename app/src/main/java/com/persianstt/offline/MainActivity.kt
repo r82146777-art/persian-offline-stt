@@ -343,6 +343,7 @@ class MainActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
                 if (text.isNotBlank()) {
+                    text = PersianPostProcess.fix(NumberNormalizer.normalize(text))
                     if (finalText.isNotEmpty()) finalText.append(" ")
                     finalText.append(text)
                     binding.resultText.setText(finalText.toString())
