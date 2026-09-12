@@ -2,7 +2,7 @@ package com.persianstt.offline
 
 import android.content.Context
 
-/** Whisper-only ASR with silence padding for short phrases. */
+/** Qwen3-ASR primary with silence padding. */
 object DualAsr {
 
     fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
@@ -17,11 +17,11 @@ object DualAsr {
         val prepared = pad(AudioPreprocessor.prepare(pcm, sampleRate), sampleRate)
         var text = ""
         try {
-            if (WhisperEngine.isReady(context)) {
-                WhisperEngine.load(context, "fa")
-                text = WhisperEngine.transcribe(prepared, sampleRate)
+            if (Qwen3Engine.isReady(context)) {
+                Qwen3Engine.load(context)
+                text = Qwen3Engine.transcribe(prepared, sampleRate)
             }
         } catch (_: Exception) {}
-        return text to if (text.isNotBlank()) "Whisper" else "none"
+        return text to if (text.isNotBlank()) "Qwen3" else "none"
     }
 }

@@ -54,15 +54,14 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.5.2
-          name: "v3.5.2 - Whisper only, fix stuck at 90 percent extract"
+          tag_name: v3.6.0
+          name: "v3.6.0 - Qwen3-ASR 0.6B (Persian support), new offline engine"
           body: |
-            ## نسخه ۳.۲.۰
-            * دیکته صوتی سیستم (RecognitionService) — قابل انتخاب به‌جای گوگل
-            * ۵ افکت صدای واقعاً متفاوت (کلیک/تیک/پاپ/شاتر/گیتار)
-            * پیش‌پردازش صدا قبل از تشخیص (حذف سکوت + نرمال)
-            * موتور Shenava Koochik + اعداد
-            * بار اول مدل (~۱۰۰ مگ) را دانلود کنید
+            ## نسخه ۳.۶.۰ — موتور جدید Qwen3-ASR
+            * موتور اصلی: **Qwen3-ASR 0.6B** (پشتیبانی رسمی فارسی + چند زبان)
+            * دانلود از GitHub (~۸۴۰ مگ)
+            * دیکته سیستم + کیبورد آفلاین
+            * حداقل ~۱ گیگ رم آزاد برای بارگذاری مدل پیشنهاد می‌شود
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false

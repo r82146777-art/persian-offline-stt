@@ -55,14 +55,14 @@ class OfflineRecognitionService : RecognitionService() {
             try {
                 // Load ONLY Shenava
                 try {
-                    if (!WhisperEngine.isReady(this)) WhisperEngine.ensureModel(this) {}
+                    if (!Qwen3Engine.isReady(this)) Qwen3Engine.ensureModel(this) {}
                 } catch (_: Exception) {}
                 val loaded = try {
-                    WhisperEngine.load(this, "fa")
+                    Qwen3Engine.load(this)
                 } catch (_: Exception) {
                     false
                 }
-                if (!loaded && !WhisperEngine.isReady(this)) {
+                if (!loaded && !Qwen3Engine.isReady(this)) {
                     listening.set(false)
                     err(listener, SpeechRecognizer.ERROR_CLIENT)
                     return@Thread

@@ -18,3 +18,4 @@ gen/
 out/
 release/
 .kotlin/
+app/libs/*.aar

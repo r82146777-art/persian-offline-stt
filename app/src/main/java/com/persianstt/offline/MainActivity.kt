@@ -134,7 +134,7 @@ class MainActivity : AppCompatActivity() {
                 prefs.edit().putString(KEY_LANG, currentLang).apply()
                 updateLangBadge()
                 Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
-                WhisperEngine.release()
+                Qwen3Engine.release()
                 
                 
                 prepareModel()
@@ -201,17 +201,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun prepareModel() {
-        if (WhisperEngine.isReady(this)) {
+        if (Qwen3Engine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
-                    try { WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) { false }
+                    try { Qwen3Engine.load(this@MainActivity) } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — موتور Whisper"
+                        binding.status.text = "آماده — موتور Qwen3-ASR"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا بارگذاری: ${WhisperEngine.lastError}"
+                        binding.status.text = "خطا بارگذاری: ${Qwen3Engine.lastError}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -219,8 +219,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور Whisper")
-            .setMessage("برای تشخیص صوتی آفلاین باید موتور Whisper (~۳۰۰ مگابایت) از GitHub دانلود شود.\n\nآیا همین الان دانلود شود؟")
+            .setTitle("دانلود موتور Qwen3-ASR")
+            .setMessage("موتور جدید چندزبانه با پشتیبانی فارسی (~۸۴۰ مگابایت از GitHub).\nممکن است دقیق‌تر از Whisper باشد.\n\nآیا دانلود شود؟")
             .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
             .setNegativeButton("لغو") { _, _ ->
                 binding.status.text = "دانلود لغو شد — برای فعال‌سازی دوباره برنامه را باز کنید"
@@ -236,14 +236,14 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود Whisper…"
+                binding.status.text = "دانلود Qwen3…"
                 withContext(Dispatchers.IO) {
-                    WhisperEngine.ensureModel(this@MainActivity) { pct ->
+                    Qwen3Engine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
                                 binding.status.text = when {
-                                    pct < 86 -> "دانلود Whisper $pct%"
+                                    pct < 86 -> "دانلود Qwen3 $pct%"
                                     pct < 100 -> "استخراج و آماده‌سازی $pct%"
                                     else -> "تمام شد"
                                 }
@@ -254,15 +254,15 @@ class MainActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) return@launch
                 binding.status.text = "در حال بارگذاری موتور…"
                 val ok = withContext(Dispatchers.IO) {
-                    try { WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) { false }
+                    try { Qwen3Engine.load(this@MainActivity) } catch (_: Throwable) { false }
                 }
                 if (isFinishing || isDestroyed) return@launch
                 if (ok) {
-                    binding.status.text = "آماده — موتور Whisper"
+                    binding.status.text = "آماده — موتور Qwen3-ASR"
                     binding.progress.visibility = android.view.View.GONE
                     binding.micButton.isEnabled = true
                 } else {
-                    val err = WhisperEngine.lastError.ifBlank { "بارگذاری ناموفق" }
+                    val err = Qwen3Engine.lastError.ifBlank { "بارگذاری ناموفق" }
                     binding.status.text = "خطا: $err"
                     binding.progress.visibility = android.view.View.GONE
                     binding.micButton.isEnabled = false
@@ -275,7 +275,7 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
             } catch (e: Exception) {
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "خطا: ${e.message ?: WhisperEngine.lastError}"
+                binding.status.text = "خطا: ${e.message ?: Qwen3Engine.lastError}"
                 binding.progress.visibility = android.view.View.GONE
                 binding.micButton.isEnabled = false
             }
@@ -284,7 +284,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!WhisperEngine.isReady(this)) {
+        if (!Qwen3Engine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -359,11 +359,11 @@ class MainActivity : AppCompatActivity() {
                     binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — موتور Whisper"
+                    binding.status.text = "آماده — موتور Qwen3-ASR"
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — موتور Whisper"
+                        binding.status.text = "آماده — موتور Qwen3-ASR"
                     }
                 }, 2500)
             }
@@ -396,7 +396,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopListening()
-        WhisperEngine.release()
+        Qwen3Engine.release()
         
         super.onDestroy()
     }
