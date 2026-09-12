@@ -139,12 +139,9 @@ object DictCorrection {
             ?: throw IllegalStateException("خواندن فایل ممکن نشد")
         val f = dictFile(context)
         // append imported lines
-        if (f.exists()) f.appendText("
-")
+        if (f.exists()) f.appendText("\n")
         f.appendText(text)
-        if (!text.endsWith("
-")) f.appendText("
-")
+        if (!text.endsWith("\n")) f.appendText("\n")
         reload(context)
         return text.lines().count { it.trim().isNotEmpty() && !it.trim().startsWith("#") }
     }
