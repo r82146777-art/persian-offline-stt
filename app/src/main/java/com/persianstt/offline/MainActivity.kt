@@ -210,6 +210,9 @@ class MainActivity : AppCompatActivity() {
                     if (ok) {
                         binding.status.text = "آماده — موتور Qwen3-ASR"
                         binding.micButton.isEnabled = true
+                    } else if (Qwen3Engine.isReady(this@MainActivity)) {
+                        binding.status.text = "مدل هست — یک‌بار اپ را ببندید و باز کنید"
+                        binding.micButton.isEnabled = false
                     } else {
                         binding.status.text = "خطا بارگذاری: ${Qwen3Engine.lastError}"
                         binding.micButton.isEnabled = false
@@ -237,46 +240,76 @@ class MainActivity : AppCompatActivity() {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
                 binding.status.text = "دانلود Qwen3…"
+                // 1) Download + extract only (no neural load yet)
                 withContext(Dispatchers.IO) {
                     Qwen3Engine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
                                 binding.status.text = when {
-                                    pct < 86 -> "دانلود Qwen3 $pct%"
-                                    pct < 100 -> "استخراج و آماده‌سازی $pct%"
-                                    else -> "تمام شد"
+                                    pct < 86 -> "دانلود $pct٪ — قطع نشود"
+                                    pct < 100 -> "استخراج فایل‌ها $pct٪ (ممکن است چند دقیقه طول بکشد)"
+                                    else -> "فایل‌ها آماده شد"
                                 }
                             }
                         }
                     }
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "در حال بارگذاری موتور…"
+                binding.status.text = "بارگذاری موتور در حافظه…"
+                binding.progress.isIndeterminate = true
+                // 2) Load separately so OOM doesn't look like download failure
                 val ok = withContext(Dispatchers.IO) {
-                    try { Qwen3Engine.load(this@MainActivity) } catch (_: Throwable) { false }
+                    try {
+                        Qwen3Engine.load(this@MainActivity)
+                    } catch (e: OutOfMemoryError) {
+                        Qwen3Engine.lastError =
+                            "حافظه کافی نیست. برنامه‌های دیگر را ببندید و اپ را دوباره باز کنید"
+                        false
+                    } catch (_: Throwable) {
+                        false
+                    }
                 }
                 if (isFinishing || isDestroyed) return@launch
+                binding.progress.isIndeterminate = false
+                binding.progress.visibility = android.view.View.GONE
                 if (ok) {
                     binding.status.text = "آماده — موتور Qwen3-ASR"
-                    binding.progress.visibility = android.view.View.GONE
                     binding.micButton.isEnabled = true
+                    Toast.makeText(this@MainActivity, "موتور آماده است", Toast.LENGTH_SHORT).show()
+                } else if (Qwen3Engine.isReady(this@MainActivity)) {
+                    // Files OK but load failed (usually OOM) — recoverable on restart
+                    binding.status.text =
+                        "دانلود کامل شد. یک‌بار برنامه را ببندید و دوباره باز کنید"
+                    binding.micButton.isEnabled = false
+                    Toast.makeText(
+                        this@MainActivity,
+                        Qwen3Engine.lastError.ifBlank {
+                            "بارگذاری نیاز به رم آزاد دارد — اپ را دوباره باز کنید"
+                        },
+                        Toast.LENGTH_LONG
+                    ).show()
                 } else {
-                    val err = Qwen3Engine.lastError.ifBlank { "بارگذاری ناموفق" }
+                    val err = Qwen3Engine.lastError.ifBlank { "ناموفق" }
                     binding.status.text = "خطا: $err"
-                    binding.progress.visibility = android.view.View.GONE
                     binding.micButton.isEnabled = false
                     Toast.makeText(this@MainActivity, err, Toast.LENGTH_LONG).show()
                 }
+            } catch (e: OutOfMemoryError) {
+                if (isFinishing || isDestroyed) return@launch
+                binding.progress.visibility = android.view.View.GONE
+                binding.status.text =
+                    "حافظه کم شد. برنامه‌های دیگر را ببندید و دوباره باز کنید"
+                binding.micButton.isEnabled = false
             } catch (e: java.net.UnknownHostException) {
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "اینترنت/DNS قطع — github.com را چک کنید"
                 binding.progress.visibility = android.view.View.GONE
+                binding.status.text = "اینترنت/DNS قطع — github.com"
                 binding.micButton.isEnabled = false
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "خطا: ${e.message ?: Qwen3Engine.lastError}"
                 binding.progress.visibility = android.view.View.GONE
+                binding.status.text = "خطا: ${e.message ?: Qwen3Engine.lastError}"
                 binding.micButton.isEnabled = false
             }
         }

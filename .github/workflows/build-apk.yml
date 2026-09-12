@@ -52,8 +52,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.6.0
-          name: "v3.6.0 - Qwen3-ASR 0.6B (Persian support), new offline engine"
+          tag_name: v3.6.1
+          name: "v3.6.1 - fix crash during prepare, safer extract/load, progress on extract"
           body: |
             ## نسخه ۳.۶.۰ — موتور جدید Qwen3-ASR
             * موتور اصلی: **Qwen3-ASR 0.6B** (پشتیبانی رسمی فارسی + چند زبان)

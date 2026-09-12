@@ -16,8 +16,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Qwen3-ASR 0.6B int8 — multilingual including Persian (fa).
- * Official sherpa-onnx package from GitHub (not HuggingFace).
+ * Qwen3-ASR 0.6B int8 — memory-safe extract + lazy load.
+ * Crash during "آماده‌سازی" was usually OOM while extracting/loading ~1GB model.
  */
 object Qwen3Engine {
 
@@ -29,6 +29,7 @@ object Qwen3Engine {
 
     @Volatile private var recognizer: OfflineRecognizer? = null
     @Volatile var lastError: String = ""
+    @Volatile var lastPhase: String = ""
 
     private val BAD_SCRIPT = Regex(
         "[\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff" +
@@ -42,9 +43,9 @@ object Qwen3Engine {
         for (n in names) {
             val f = File(dir, n)
             if (f.exists() && f.length() > 1000) return f
-            dir.walkTopDown().maxDepth(4).forEach { c ->
-                if (c.isFile && c.name == n && c.length() > 1000) return c
-            }
+        }
+        dir.walkTopDown().maxDepth(4).forEach { c ->
+            if (c.isFile && c.name in names && c.length() > 1000) return c
         }
         return null
     }
@@ -65,58 +66,75 @@ object Qwen3Engine {
         val dec = find(dir, "decoder.int8.onnx", "decoder.onnx")
         val tok = findTokenizerDir(dir)
         return conv != null && enc != null && dec != null && tok != null &&
-            (enc.length() > 50_000_000) && (dec.length() > 50_000_000)
+            enc!!.length() > 50_000_000 && dec!!.length() > 50_000_000
     }
 
+    /**
+     * Download + extract only. Does NOT load the neural net into RAM.
+     * Progress: 0-85 download, 86-99 extract, 100 files ready.
+     */
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
         if (isReady(context)) {
             onProgress(100)
+            lastPhase = "ready"
             return
         }
         val dir = modelDir(context)
         if (!dir.exists()) dir.mkdirs()
         val tarFile = File(dir, "qwen3.tar.bz2")
         try {
-            downloadResumable(TAR_URL, tarFile) { pct -> onProgress((pct * 85) / 100) }
+            lastPhase = "download"
+            // Resume incomplete download
+            downloadResumable(TAR_URL, tarFile) { pct ->
+                onProgress((pct * 85) / 100)
+            }
             onProgress(86)
-            if (!tarFile.exists() || tarFile.length() < 10_000_000) {
-                lastError = "دانلود ناقص Qwen3"
+            if (!tarFile.exists() || tarFile.length() < 50_000_000) {
+                lastError = "دانلود ناقص است — دوباره تلاش کنید"
                 throw IllegalStateException(lastError)
             }
-            onProgress(88)
-            extractTarBz2(tarFile, dir)
-            onProgress(94)
-            try { tarFile.delete() } catch (_: Exception) {}
-            flatten(dir)
+
+            lastPhase = "extract"
+            // Extract with progress 86..98
+            extractTarBz2(tarFile, dir) { extractPct ->
+                onProgress(86 + (extractPct * 12) / 100)
+            }
             onProgress(98)
+
+            // Free disk ASAP before any load
+            try {
+                if (tarFile.exists()) tarFile.delete()
+            } catch (_: Exception) {}
+            // leftover part files
+            try {
+                File(dir, "qwen3.tar.bz2.part").delete()
+            } catch (_: Exception) {}
+
+            System.gc()
+            onProgress(99)
+
             if (!isReady(context)) {
-                val names = dir.listFiles()?.joinToString { it.name } ?: "empty"
-                lastError = "استخراج ناقص: $names"
+                val names = dir.walkTopDown().maxDepth(3)
+                    .filter { it.isFile }
+                    .map { "${it.name}:${it.length() / 1_000_000}M" }
+                    .joinToString()
+                lastError = "استخراج ناقص ($names)"
                 throw IllegalStateException(lastError)
             }
             onProgress(100)
             lastError = ""
+            lastPhase = "extracted"
+            Log.i(TAG, "model files ready (not loaded yet)")
         } catch (e: java.net.UnknownHostException) {
             lastError = "اینترنت/DNS قطع (github.com)"
             throw e
-        } catch (e: Exception) {
-            lastError = e.message ?: "خطای دانلود Qwen3"
+        } catch (e: OutOfMemoryError) {
+            lastError = "حافظه کافی نیست هنگام استخراج — برنامه‌های دیگر را ببندید"
+            try { System.gc() } catch (_: Throwable) {}
             throw e
-        }
-    }
-
-    private fun flatten(dir: File) {
-        dir.listFiles()?.filter { it.isDirectory && it.name.startsWith("sherpa-onnx") }?.forEach { nested ->
-            nested.listFiles()?.forEach { f ->
-                val dest = File(dir, f.name)
-                if (!dest.exists()) {
-                    try {
-                        if (f.isDirectory) f.copyRecursively(dest)
-                        else f.copyTo(dest, overwrite = false)
-                    } catch (_: Exception) {}
-                }
-            }
-            try { nested.deleteRecursively() } catch (_: Exception) {}
+        } catch (e: Exception) {
+            lastError = e.message ?: "خطای دانلود/استخراج"
+            throw e
         }
     }
 
@@ -124,7 +142,7 @@ object Qwen3Engine {
         val tmp = File(dest.absolutePath + ".part")
         var existing = if (tmp.exists()) tmp.length() else 0L
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 30_000
+            connectTimeout = 45_000
             readTimeout = 600_000
             instanceFollowRedirects = true
             if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
@@ -139,31 +157,28 @@ object Qwen3Engine {
         val totalFromHeader = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
         val total = if (code == 206 && totalFromHeader > 0) existing + totalFromHeader
         else if (totalFromHeader > 0) totalFromHeader else -1L
-        val input = BufferedInputStream(conn.inputStream, 64 * 1024)
-        val out = FileOutputStream(tmp, existing > 0 && code == 206)
-        var done = existing
-        var lastPct = -1
-        val buf = ByteArray(256 * 1024)
-        try {
-            while (true) {
-                val n = input.read(buf)
-                if (n <= 0) break
-                out.write(buf, 0, n)
-                done += n
-                if (total > 0) {
-                    val pct = ((done * 100) / total).toInt().coerceIn(0, 99)
-                    if (pct != lastPct) {
-                        lastPct = pct
-                        onProgress(pct)
+        BufferedInputStream(conn.inputStream, 64 * 1024).use { input ->
+            FileOutputStream(tmp, existing > 0 && code == 206).use { out ->
+                var done = existing
+                var lastPct = -1
+                val buf = ByteArray(64 * 1024) // smaller buffer = less peak RAM
+                while (true) {
+                    val n = input.read(buf)
+                    if (n <= 0) break
+                    out.write(buf, 0, n)
+                    done += n
+                    if (total > 0) {
+                        val pct = ((done * 100) / total).toInt().coerceIn(0, 99)
+                        if (pct != lastPct) {
+                            lastPct = pct
+                            onProgress(pct)
+                        }
                     }
                 }
+                out.flush()
             }
-            out.flush()
-        } finally {
-            try { out.close() } catch (_: Exception) {}
-            try { input.close() } catch (_: Exception) {}
-            conn.disconnect()
         }
+        conn.disconnect()
         if (dest.exists()) dest.delete()
         if (!tmp.renameTo(dest)) {
             tmp.copyTo(dest, overwrite = true)
@@ -171,34 +186,81 @@ object Qwen3Engine {
         }
     }
 
-    private fun extractTarBz2(tarBz2: File, destDir: File) {
+    private fun extractTarBz2(tarBz2: File, destDir: File, onProgress: (Int) -> Unit = {}) {
+        val totalBytes = tarBz2.length().coerceAtLeast(1)
+        var readCompressedApprox = 0L
+        // Approximate progress from stream position is hard with bzip2;
+        // count entries processed instead.
+        var entries = 0
+        val expectedEntries = 8 // rough
+
         FileInputStream(tarBz2).use { fis ->
-            BZip2CompressorInputStream(BufferedInputStream(fis, 64 * 1024)).use { bzIn ->
+            BZip2CompressorInputStream(BufferedInputStream(fis, 32 * 1024)).use { bzIn ->
                 TarArchiveInputStream(bzIn).use { tarIn ->
                     var entry = tarIn.nextEntry
-                    val buf = ByteArray(256 * 1024)
+                    val buf = ByteArray(32 * 1024)
                     while (entry != null) {
                         val name = entry.name.replace('\\', '/')
-                        // keep relative structure for tokenizer/
-                        val relative = name.substringAfter("sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/")
-                            .ifBlank { name.substringAfterLast('/') }
-                        if (relative.isBlank() || entry.isDirectory) {
-                            if (entry.isDirectory && relative.isNotBlank()) {
-                                File(destDir, relative).mkdirs()
-                            }
+                        val relative = when {
+                            name.contains("sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/") ->
+                                name.substringAfter("sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/")
+                            else -> name.substringAfterLast('/')
+                        }
+                        if (relative.isBlank()) {
+                            entry = tarIn.nextEntry
+                            continue
+                        }
+                        if (entry.isDirectory) {
+                            File(destDir, relative).mkdirs()
                             entry = tarIn.nextEntry
                             continue
                         }
                         val outFile = File(destDir, relative)
                         outFile.parentFile?.mkdirs()
+                        // Skip already-complete large files (resume extract)
+                        if (outFile.exists() && outFile.length() == entry.size && entry.size > 0) {
+                            tarIn.skip(entry.size)
+                            entries++
+                            onProgress(((entries * 100) / expectedEntries).coerceIn(0, 99))
+                            entry = tarIn.nextEntry
+                            continue
+                        }
                         FileOutputStream(outFile).use { out ->
                             var n: Int
-                            while (tarIn.read(buf).also { n = it } > 0) out.write(buf, 0, n)
+                            while (tarIn.read(buf).also { n = it } > 0) {
+                                out.write(buf, 0, n)
+                                readCompressedApprox += n
+                            }
+                            out.flush()
                         }
+                        // Drop RAM pressure after huge onnx files
+                        if (outFile.length() > 50_000_000) {
+                            try { System.gc() } catch (_: Throwable) {}
+                        }
+                        entries++
+                        onProgress(((entries * 100) / expectedEntries).coerceIn(0, 99))
                         entry = tarIn.nextEntry
                     }
                 }
             }
+        }
+        // Move nested folder contents up if needed
+        destDir.listFiles()?.filter {
+            it.isDirectory && it.name.startsWith("sherpa-onnx-qwen3")
+        }?.forEach { nested ->
+            nested.walkTopDown().forEach { f ->
+                if (f.isFile) {
+                    val rel = f.relativeTo(nested).path
+                    val dest = File(destDir, rel)
+                    if (!dest.exists()) {
+                        dest.parentFile?.mkdirs()
+                        try {
+                            f.copyTo(dest, overwrite = false)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+            try { nested.deleteRecursively() } catch (_: Exception) {}
         }
     }
 
@@ -206,16 +268,23 @@ object Qwen3Engine {
     fun load(context: Context): Boolean {
         if (recognizer != null) return true
         if (!isReady(context)) {
-            lastError = "مدل Qwen3 نیست"
+            lastError = "فایل‌های مدل کامل نیست"
             return false
         }
+        lastPhase = "load"
         return try {
+            // Free other engines if still held
+            try { WhisperEngine.release() } catch (_: Throwable) {}
+            try { ShenavaEngine.release() } catch (_: Throwable) {}
+            System.gc()
+            Thread.sleep(200)
+
             val dir = modelDir(context)
             val conv = find(dir, "conv_frontend.onnx")!!
             val enc = find(dir, "encoder.int8.onnx", "encoder.onnx")!!
             val dec = find(dir, "decoder.int8.onnx", "decoder.onnx")!!
             val tok = findTokenizerDir(dir)!!
-            System.gc()
+
             val config = OfflineRecognizerConfig(
                 modelConfig = OfflineModelConfig(
                     qwen3Asr = OfflineQwen3AsrModelConfig(
@@ -223,23 +292,27 @@ object Qwen3Engine {
                         encoder = enc.absolutePath,
                         decoder = dec.absolutePath,
                         tokenizer = tok.absolutePath,
-                        maxNewTokens = 128,
+                        maxNewTokens = 96,
                         temperature = 1e-6f
                     ),
                     tokens = "",
-                    numThreads = 2,
+                    numThreads = 1, // lower peak RAM
                     provider = "cpu"
                 )
             )
             recognizer = OfflineRecognizer(config = config)
             lastError = ""
+            lastPhase = "loaded"
             true
         } catch (e: OutOfMemoryError) {
-            lastError = "حافظه کم برای Qwen3 (~۱ گیگ رم آزاد لازم)"
-            Log.e(TAG, "OOM", e)
+            recognizer = null
+            lastError = "حافظه کافی نیست. برنامه‌های دیگر را ببندید و دوباره باز کنید"
+            Log.e(TAG, "OOM on load", e)
+            try { System.gc() } catch (_: Throwable) {}
             false
-        } catch (e: Exception) {
-            lastError = e.message ?: "خطای بارگذاری Qwen3"
+        } catch (e: Throwable) {
+            recognizer = null
+            lastError = e.message ?: "خطای بارگذاری"
             Log.e(TAG, "load fail", e)
             false
         }
@@ -249,6 +322,7 @@ object Qwen3Engine {
     fun release() {
         try { recognizer?.release() } catch (_: Exception) {}
         recognizer = null
+        lastPhase = "released"
     }
 
     @Synchronized
@@ -261,6 +335,9 @@ object Qwen3Engine {
             stream.acceptWaveform(floats, sampleRate)
             r.decode(stream)
             cleanResult(r.getResult(stream).text.trim())
+        } catch (e: OutOfMemoryError) {
+            lastError = "حافظه کم هنگام تشخیص"
+            ""
         } catch (e: Exception) {
             Log.e(TAG, "transcribe", e)
             ""
@@ -273,7 +350,6 @@ object Qwen3Engine {
         if (text.isBlank()) return ""
         if (BAD_SCRIPT.containsMatchIn(text)) return ""
         var t = text
-        // strip language tags sometimes produced
         t = t.replace(Regex("""^\s*(language|lang)\s*:\s*\w+\s*""", RegexOption.IGNORE_CASE), "")
         t = t.replace(Regex("""[«»""]"""), "")
         t = t.replace(Regex("""\s{2,}"""), " ").trim()
