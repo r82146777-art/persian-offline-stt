@@ -1,189 +1,239 @@
 package com.persianstt.offline
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.zip.ZipInputStream
 
+/**
+ * Vosk Persian **large** model (vosk-model-fa-0.42 ~1.6GB).
+ * Official table: better WER than small-fa (16.7 vs 23.4 on CV).
+ * This is a different engine path from Shenava/Whisper/Qwen3.
+ */
 object VoskEngine {
 
-    private const val FA_NAME = "vosk-model-small-fa-0.42"
-    private const val EN_NAME = "vosk-model-small-en-us-0.15"
-    private const val FA_URL = "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip"
-    private const val EN_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+    private const val TAG = "VoskEngine"
+    private const val FA_NAME = "vosk-model-fa-0.42"
+    private const val FA_URL = "https://alphacephei.com/vosk/models/vosk-model-fa-0.42.zip"
+    // mirror sometimes needed
+    private const val FA_URL_ALT =
+        "https://huggingface.co/alphacep/vosk-model-fa-0.42/resolve/main/vosk-model-fa-0.42.zip"
 
-    @Volatile private var faModel: Model? = null
-    @Volatile private var enModel: Model? = null
-    @Volatile private var loadedLang: String = ""
+    @Volatile private var model: Model? = null
+    @Volatile var lastError: String = ""
 
     private fun modelsRoot(context: Context): File =
         File(context.applicationContext.filesDir, "vosk-models")
 
-    fun isReady(context: Context, lang: String = "fa"): Boolean {
-        val name = if (lang.startsWith("en")) EN_NAME else FA_NAME
-        val dir = File(modelsRoot(context), name)
-        return dir.isDirectory && (dir.list()?.isNotEmpty() == true)
+    private fun modelDir(context: Context): File =
+        File(modelsRoot(context), FA_NAME)
+
+    fun isReady(context: Context): Boolean {
+        val dir = modelDir(context)
+        // vosk models need am/ / graph/ or conf/
+        if (!dir.isDirectory) return false
+        val marker = File(dir, "am/final.mdl")
+        val marker2 = File(dir, "conf/model.conf")
+        val marker3 = File(dir, "graph/Gr.fst")
+        return (marker.exists() || marker2.exists() || marker3.exists()) &&
+            dir.walkTopDown().any { it.isFile && it.length() > 1_000_000 }
     }
 
-    fun isAnyReady(context: Context): Boolean =
-        isReady(context, "fa") || isReady(context, "en")
-
-    fun isBothReady(context: Context): Boolean =
-        isReady(context, "fa") && isReady(context, "en")
-
-    fun ensureModels(context: Context, onProgress: (Int) -> Unit = {}) {
+    fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
+        if (isReady(context)) {
+            onProgress(100)
+            return
+        }
         val root = modelsRoot(context)
         if (!root.exists()) root.mkdirs()
-        listOf(
-            Triple(FA_NAME, FA_URL, 0),
-            Triple(EN_NAME, EN_URL, 50)
-        ).forEach { (name, url, base) ->
-            val dest = File(root, name)
-            if (dest.isDirectory && dest.list()?.isNotEmpty() == true) {
-                onProgress(base + 50)
-                return@forEach
+        // remove old small model to free space
+        try {
+            File(root, "vosk-model-small-fa-0.42").deleteRecursively()
+            File(root, "vosk-model-small-en-us-0.15").deleteRecursively()
+        } catch (_: Exception) {}
+
+        val zipFile = File(root, "$FA_NAME.zip")
+        try {
+            try {
+                downloadResumable(FA_URL, zipFile) { pct -> onProgress((pct * 85) / 100) }
+            } catch (e: Exception) {
+                Log.w(TAG, "primary URL failed, try alt", e)
+                downloadResumable(FA_URL_ALT, zipFile) { pct -> onProgress((pct * 85) / 100) }
             }
-            downloadAndUnzip(url, root, name) { pct -> onProgress(base + pct / 2) }
+            onProgress(86)
+            if (!zipFile.exists() || zipFile.length() < 50_000_000) {
+                lastError = "دانلود ناقص"
+                throw IllegalStateException(lastError)
+            }
+            unzip(zipFile, root) { p -> onProgress(86 + (p * 12) / 100) }
+            onProgress(98)
+            try { zipFile.delete() } catch (_: Exception) {}
+            // normalize folder name
+            root.listFiles()?.forEach { f ->
+                if (f.isDirectory && f.name.startsWith("vosk-model-fa") && f.name != FA_NAME) {
+                    val dest = File(root, FA_NAME)
+                    if (!dest.exists()) f.renameTo(dest)
+                }
+            }
+            if (!isReady(context)) {
+                lastError = "استخراج مدل Vosk ناقص"
+                throw IllegalStateException(lastError)
+            }
+            onProgress(100)
+            lastError = ""
+        } catch (e: java.net.UnknownHostException) {
+            lastError = "اینترنت/DNS قطع"
+            throw e
+        } catch (e: Exception) {
+            lastError = e.message ?: "خطای دانلود Vosk"
+            throw e
         }
-        onProgress(100)
     }
 
-    private fun downloadAndUnzip(urlStr: String, root: File, folderName: String, onProgress: (Int) -> Unit) {
-        val zipFile = File(root, "$folderName.zip")
+    private fun downloadResumable(urlStr: String, dest: File, onProgress: (Int) -> Unit) {
+        val tmp = File(dest.absolutePath + ".part")
+        var existing = if (tmp.exists()) tmp.length() else 0L
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 30_000; readTimeout = 180_000; instanceFollowRedirects = true
+            connectTimeout = 45_000
+            readTimeout = 600_000
+            instanceFollowRedirects = true
+            if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
         }
         conn.connect()
-        val total = conn.contentLengthLong.coerceAtLeast(1)
-        var done = 0L; var last = -1
-        BufferedInputStream(conn.inputStream).use { input ->
-            FileOutputStream(zipFile).use { out ->
+        val code = conn.responseCode
+        if (code == 200 && existing > 0) {
+            existing = 0
+            tmp.delete()
+        }
+        if (code !in 200..299) throw IllegalStateException("HTTP $code")
+        val totalFromHeader = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
+        val total = if (code == 206 && totalFromHeader > 0) existing + totalFromHeader
+        else if (totalFromHeader > 0) totalFromHeader else -1L
+        BufferedInputStream(conn.inputStream, 64 * 1024).use { input ->
+            FileOutputStream(tmp, existing > 0 && code == 206).use { out ->
+                var done = existing
+                var last = -1
                 val buf = ByteArray(64 * 1024)
                 while (true) {
-                    val n = input.read(buf); if (n <= 0) break
-                    out.write(buf, 0, n); done += n
-                    val pct = ((done * 100) / total).toInt().coerceIn(0, 100)
-                    if (pct != last) { last = pct; onProgress(pct) }
+                    val n = input.read(buf)
+                    if (n <= 0) break
+                    out.write(buf, 0, n)
+                    done += n
+                    if (total > 0) {
+                        val pct = ((done * 100) / total).toInt().coerceIn(0, 99)
+                        if (pct != last) {
+                            last = pct
+                            onProgress(pct)
+                        }
+                    }
                 }
+                out.flush()
             }
         }
         conn.disconnect()
-        ZipInputStream(zipFile.inputStream().buffered()).use { zis ->
-            var entry = zis.nextEntry
+        if (dest.exists()) dest.delete()
+        if (!tmp.renameTo(dest)) {
+            tmp.copyTo(dest, overwrite = true)
+            tmp.delete()
+        }
+    }
+
+    private fun unzip(zipFile: File, destRoot: File, onProgress: (Int) -> Unit) {
+        val total = zipFile.length().coerceAtLeast(1)
+        var written = 0L
+        var last = -1
+        ZipInputStream(BufferedInputStream(FileInputStream(zipFile), 64 * 1024)).use { zis ->
             val buf = ByteArray(64 * 1024)
+            var entry = zis.nextEntry
             while (entry != null) {
-                val outFile = File(root, entry.name)
-                if (entry.isDirectory) outFile.mkdirs()
-                else {
+                val name = entry.name
+                if (name.contains("..")) {
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                    continue
+                }
+                val outFile = File(destRoot, name)
+                if (entry.isDirectory) {
+                    outFile.mkdirs()
+                } else {
                     outFile.parentFile?.mkdirs()
                     FileOutputStream(outFile).use { out ->
-                        while (true) { val n = zis.read(buf); if (n <= 0) break; out.write(buf, 0, n) }
+                        var n: Int
+                        while (zis.read(buf).also { n = it } > 0) {
+                            out.write(buf, 0, n)
+                            written += n
+                        }
                     }
                 }
-                zis.closeEntry(); entry = zis.nextEntry
+                zis.closeEntry()
+                val pct = ((written * 100) / (total * 3)).toInt().coerceIn(0, 99) // zip expands
+                if (pct != last) {
+                    last = pct
+                    onProgress(pct)
+                }
+                entry = zis.nextEntry
             }
-        }
-        zipFile.delete()
-        val dest = File(root, folderName)
-        if (!dest.exists()) {
-            root.listFiles()?.firstOrNull { it.isDirectory && it.name.startsWith(folderName.take(12)) }?.renameTo(dest)
         }
     }
 
     @Synchronized
-    fun load(context: Context, languageHint: String = "fa"): Boolean {
-        val lang = when {
-            languageHint.lowercase().startsWith("en") -> "en"
-            languageHint.lowercase() == "auto" -> "auto"
-            else -> "fa"
+    fun load(context: Context): Boolean {
+        if (model != null) return true
+        if (!isReady(context)) {
+            lastError = "مدل Vosk نیست"
+            return false
         }
-        if (lang == "auto") {
-            if (isReady(context, "fa") && faModel == null) {
-                try { faModel = Model(File(modelsRoot(context), FA_NAME).absolutePath) } catch (_: Exception) {}
-            }
-            if (isReady(context, "en") && enModel == null) {
-                try { enModel = Model(File(modelsRoot(context), EN_NAME).absolutePath) } catch (_: Exception) {}
-            }
-            loadedLang = "auto"
-            return faModel != null || enModel != null
-        }
-        if (loadedLang == lang) {
-            val m = if (lang == "en") enModel else faModel
-            if (m != null) return true
-        }
-        if (!isReady(context, lang)) return false
         return try {
-            val name = if (lang == "en") EN_NAME else FA_NAME
-            val model = Model(File(modelsRoot(context), name).absolutePath)
-            if (lang == "en") { try { enModel?.close() } catch (_: Exception) {}; enModel = model }
-            else { try { faModel?.close() } catch (_: Exception) {}; faModel = model }
-            loadedLang = lang
+            System.gc()
+            model = Model(modelDir(context).absolutePath)
+            lastError = ""
             true
-        } catch (_: Exception) { false }
+        } catch (e: OutOfMemoryError) {
+            model = null
+            lastError = "حافظه کم برای مدل بزرگ Vosk"
+            Log.e(TAG, "OOM", e)
+            false
+        } catch (e: Exception) {
+            model = null
+            lastError = e.message ?: "خطای بارگذاری Vosk"
+            Log.e(TAG, "load", e)
+            false
+        }
     }
 
     @Synchronized
     fun release() {
-        try { faModel?.close() } catch (_: Exception) {}
-        try { enModel?.close() } catch (_: Exception) {}
-        faModel = null; enModel = null; loadedLang = ""
+        try { model?.close() } catch (_: Exception) {}
+        model = null
     }
 
-    private fun decodeWith(model: Model, pcm16: ShortArray, sampleRate: Int): String {
+    @Synchronized
+    fun transcribe(pcm16: ShortArray, sampleRate: Int = 16000): String {
+        val m = model ?: return ""
+        if (pcm16.isEmpty() || pcm16.size < sampleRate / 6) return ""
         return try {
-            val rec = Recognizer(model, sampleRate.toFloat())
-            var off = 0; val chunk = sampleRate / 2
+            val rec = Recognizer(m, sampleRate.toFloat())
+            var off = 0
+            val chunk = sampleRate / 2
             while (off < pcm16.size) {
                 val n = minOf(chunk, pcm16.size - off)
                 rec.acceptWaveForm(pcm16.copyOfRange(off, off + n), n)
                 off += n
             }
-            val json = rec.finalResult; rec.close()
-            JSONObject(json).optString("text", "").trim()
-        } catch (_: Exception) { "" }
-    }
-
-    private fun scoreText(text: String, preferFa: Boolean): Int {
-        if (text.isBlank()) return -1
-        var score = text.length
-        val fa = text.count { it in '\u0600'..'\u06FF' }
-        val en = text.count { it in 'a'..'z' || it in 'A'..'Z' }
-        score += if (preferFa) fa * 3 - en else en * 3 - fa
-        if (text.contains("میلیارد") || text.contains("میلیون") || text.contains("billion")) score -= 20
-        return score
-    }
-
-    @Synchronized
-    fun transcribe(pcm16: ShortArray, sampleRate: Int = 16000, languageHint: String = "auto"): String {
-        if (pcm16.isEmpty() || pcm16.size < sampleRate / 4) return ""
-        val mode = when {
-            languageHint.lowercase().startsWith("en") -> "en"
-            languageHint.lowercase() == "auto" || languageHint.isBlank() -> "auto"
-            else -> "fa"
+            val json = rec.finalResult
+            rec.close()
+            val raw = JSONObject(json).optString("text", "").trim()
+            NumberNormalizer.normalize(PersianPostProcess.fix(raw))
+        } catch (_: Exception) {
+            ""
         }
-        if (mode == "auto") {
-            val faText = faModel?.let { decodeWith(it, pcm16, sampleRate) } ?: ""
-            val enText = enModel?.let { decodeWith(it, pcm16, sampleRate) } ?: ""
-            val best = if (scoreText(faText, true) >= scoreText(enText, false)) faText else enText
-            return NumberNormalizer.normalize(best)
-        }
-        val primary = if (mode == "en") enModel else faModel
-        val secondary = if (mode == "en") faModel else enModel
-        var text = primary?.let { decodeWith(it, pcm16, sampleRate) } ?: ""
-        if (text.length < 2 && secondary != null) {
-            val alt = decodeWith(secondary, pcm16, sampleRate)
-            if (alt.length > text.length) text = alt
-        }
-        return NumberNormalizer.normalize(text)
     }
-
-    @Synchronized
-    fun transcribe(pcm16: ShortArray, sampleRate: Int = 16000): String =
-        transcribe(pcm16, sampleRate, loadedLang.ifBlank { "auto" })
 }

@@ -2,7 +2,7 @@ package com.persianstt.offline
 
 import android.content.Context
 
-/** Shenava Koochik (Persian-only, ~100MB) — low RAM. */
+/** Vosk large Persian model with light padding. */
 object DualAsr {
 
     fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
@@ -17,11 +17,11 @@ object DualAsr {
         val prepared = pad(AudioPreprocessor.prepare(pcm, sampleRate), sampleRate)
         var text = ""
         try {
-            if (ShenavaEngine.isReady(context)) {
-                ShenavaEngine.load(context)
-                text = ShenavaEngine.transcribe(prepared, sampleRate)
+            if (VoskEngine.isReady(context)) {
+                VoskEngine.load(context)
+                text = VoskEngine.transcribe(prepared, sampleRate)
             }
         } catch (_: Exception) {}
-        return text to if (text.isNotBlank()) "Shenava" else "none"
+        return text to if (text.isNotBlank()) "Vosk" else "none"
     }
 }
