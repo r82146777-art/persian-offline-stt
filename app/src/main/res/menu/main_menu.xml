@@ -6,6 +6,10 @@
         android:title="@string/menu_language"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_dict"
+        android:title="دیکشنری اصلاح کلمات"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_settings"
         android:title="تنظیمات صدا و ویبره"
         app:showAsAction="never" />

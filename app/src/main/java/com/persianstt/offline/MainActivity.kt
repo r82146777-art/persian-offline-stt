@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         binding.copyButton.setOnClickListener { copyText() }
+        try { DictCorrection.reload(this) } catch (_: Exception) {}
         binding.clearButton.setOnClickListener {
             finalText.clear()
             binding.resultText.setText("")
@@ -95,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         return when (item.itemId) {
             R.id.action_language -> { showLanguagePicker(); true }
             R.id.action_settings -> { showSoundSettings(); true }
+            R.id.action_dict -> { showDictEditor(); true }
             R.id.action_help -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.help_title)
@@ -141,6 +143,39 @@ class MainActivity : AppCompatActivity() {
             }.show()
     }
 
+
+
+    private fun showDictEditor() {
+        DictCorrection.reload(this)
+        val file = DictCorrection.dictFile(this)
+        val input = android.widget.EditText(this).apply {
+            setText(try { file.readText() } catch (_: Exception) { "" })
+            minLines = 10
+            maxLines = 20
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            setPadding(32, 24, 32, 24)
+            hint = "اشتباه = درست\nیا فقط عبارت درست"
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("دیکشنری اصلاح آفلاین")
+            .setMessage("هر خط: عبارت درست\nیا: اشتباه = درست\nبعد از ذخیره، تشخیص با این لیست اصلاح می‌شود.")
+            .setView(input)
+            .setPositiveButton("ذخیره") { _, _ ->
+                try {
+                    file.writeText(input.text.toString())
+                    DictCorrection.reload(this)
+                    Toast.makeText(this, "دیکشنری ذخیره شد", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "خطا: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("لغو", null)
+            .setNeutralButton("نمونه") { _, _ ->
+                DictCorrection.reload(this)
+                Toast.makeText(this, "فایل نمونه بارگذاری شد — دوباره منو را باز کنید", Toast.LENGTH_LONG).show()
+            }
+            .show()
+    }
 
     private fun showSoundSettings() {
         val soundOn = prefs.getBoolean(KEY_SOUND, true)

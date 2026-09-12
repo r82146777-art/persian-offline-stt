@@ -2,7 +2,7 @@ package com.persianstt.offline
 
 import android.content.Context
 
-/** Vosk large Persian model with light padding. */
+/** Vosk + dictionary correction. */
 object DualAsr {
 
     fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
@@ -22,6 +22,9 @@ object DualAsr {
                 text = VoskEngine.transcribe(prepared, sampleRate)
             }
         } catch (_: Exception) {}
-        return text to if (text.isNotBlank()) "Vosk" else "none"
+        if (text.isNotBlank()) {
+            text = DictCorrection.apply(context, text)
+        }
+        return text to if (text.isNotBlank()) "Vosk+Dict" else "none"
     }
 }
