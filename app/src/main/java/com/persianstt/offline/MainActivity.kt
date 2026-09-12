@@ -86,6 +86,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         binding.copyButton.setOnClickListener { copyText() }
         try { DictCorrection.reload(this) } catch (_: Exception) {}
+        try { if (LexiconCorrector.isReady(this)) LexiconCorrector.load(this) } catch (_: Exception) {}
         binding.editButton.setOnClickListener { showEditTextDialog() }
         binding.emojiButton.setOnClickListener { applyEmojis() }
         binding.clearButton.setOnClickListener {
@@ -193,32 +194,20 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
     private fun showEditTextDialog() {
-        val current = binding.resultText.text?.toString() ?: ""
-        val input = android.widget.EditText(this).apply {
-            setText(current)
-            minLines = 4
-            maxLines = 10
-            setSelection(text.length)
-            setPadding(32, 24, 32, 24)
+        val current = binding.resultText.text?.toString()?.trim().orEmpty()
+        if (current.isBlank()) {
+            Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
+            return
         }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("اصلاح / ویرایش متن")
-            .setView(input)
-            .setPositiveButton("اعمال") { _, _ ->
-                val fixed = input.text.toString()
-                finalText.clear()
-                finalText.append(fixed)
-                binding.resultText.setText(fixed)
-                // also learn: if user fixed, add map if different
-                if (current.isNotBlank() && fixed.isNotBlank() && current != fixed) {
-                    try {
-                        DictCorrection.appendEntry(this, "$current = $fixed")
-                    } catch (_: Exception) {}
-                }
-                Toast.makeText(this, "متن اصلاح شد", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("لغو", null)
-            .show()
+        val fixed = LexiconCorrector.autoCorrect(this, current)
+        finalText.clear()
+        finalText.append(fixed)
+        binding.resultText.setText(fixed)
+        if (fixed == current) {
+            Toast.makeText(this, "تغییری لازم نبود", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "متن خودکار اصلاح شد", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun applyEmojis() {
@@ -231,7 +220,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         finalText.clear()
         finalText.append(enriched)
         binding.resultText.setText(enriched)
-        Toast.makeText(this, "ایموجی اضافه شد", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "ایموجی در متن قرار گرفت", Toast.LENGTH_SHORT).show()
     }
 
     private fun showSoundSettings() {
@@ -336,14 +325,34 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     VoskEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
-                                binding.progress.progress = pct
+                                // model download maps to 0..70
+                                val mapped = (pct * 70) / 100
+                                binding.progress.progress = mapped
                                 binding.status.text = when {
-                                    pct < 86 -> "دانلود $pct٪"
-                                    pct < 100 -> "استخراج $pct٪"
-                                    else -> "فایل‌ها آماده"
+                                    pct < 86 -> "دانلود موتور $mapped٪"
+                                    pct < 100 -> "استخراج موتور $mapped٪"
+                                    else -> "موتور آماده"
                                 }
                             }
                         }
+                    }
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) {
+                            binding.status.text = "دانلود دیکشنری کلمات…"
+                        }
+                    }
+                    try {
+                        LexiconCorrector.ensureLexicon(this@MainActivity) { pct ->
+                            runOnUiThread {
+                                if (!isFinishing && !isDestroyed) {
+                                    val mapped = 70 + (pct * 30) / 100
+                                    binding.progress.progress = mapped
+                                    binding.status.text = "دیکشنری $mapped٪"
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {
+                        // lexicon optional — engine still works
                     }
                 }
                 if (isFinishing || isDestroyed) return@launch

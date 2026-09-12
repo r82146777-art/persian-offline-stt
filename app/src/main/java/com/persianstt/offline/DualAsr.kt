@@ -2,7 +2,7 @@ package com.persianstt.offline
 
 import android.content.Context
 
-/** Vosk + dictionary correction. */
+/** Vosk + lexicon + user dictionary auto-correction. */
 object DualAsr {
 
     fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
@@ -23,8 +23,8 @@ object DualAsr {
             }
         } catch (_: Exception) {}
         if (text.isNotBlank()) {
-            text = DictCorrection.apply(context, text)
+            text = LexiconCorrector.autoCorrect(context, text)
         }
-        return text to if (text.isNotBlank()) "Vosk+Dict" else "none"
+        return text to if (text.isNotBlank()) "Vosk+Lex" else "none"
     }
 }

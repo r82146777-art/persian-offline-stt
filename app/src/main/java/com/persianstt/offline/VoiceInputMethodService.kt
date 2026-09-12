@@ -311,17 +311,17 @@ class VoiceInputMethodService : InputMethodService() {
 
     private fun editLastCommitted() {
         val ic = currentInputConnection ?: return
-        val before = try { ic.getTextBeforeCursor(200, 0)?.toString() ?: "" } catch (_: Exception) { "" }
+        val before = try { ic.getTextBeforeCursor(400, 0)?.toString() ?: "" } catch (_: Exception) { "" }
         if (before.isBlank()) return
-        // simple: delete last word and allow retype — open nothing in IME context
-        // remove last 1-40 chars word for quick fix
-        val trim = before.trimEnd()
-        val lastSpace = trim.lastIndexOf(' ')
-        val lastWord = if (lastSpace >= 0) trim.substring(lastSpace + 1) else trim
-        if (lastWord.isNotEmpty()) {
-            ic.deleteSurroundingText(lastWord.length, 0)
-            statusView?.text = "ویرایش: کلمه پاک شد — دوباره بنویس/بگو"
+        val fixed = LexiconCorrector.autoCorrect(this, before)
+        if (fixed == before) {
+            statusView?.text = "اصلاحی لازم نبود"
+            return
         }
+        ic.deleteSurroundingText(before.length, 0)
+        ic.commitText(fixed, 1)
+        lastCommitted = fixed
+        statusView?.text = "متن خودکار اصلاح شد"
     }
 
     private fun startVoice() {
