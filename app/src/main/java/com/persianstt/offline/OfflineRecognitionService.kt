@@ -15,7 +15,7 @@ import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * System RecognitionService — ONLY Shenava Koochik (no Vosk/Whisper).
+ * System RecognitionService — Omnilingual 300M CTC offline.
  * Runs in a separate process to avoid OEM permission bugs.
  */
 class OfflineRecognitionService : RecognitionService() {
@@ -53,16 +53,16 @@ class OfflineRecognitionService : RecognitionService() {
 
         worker = Thread {
             try {
-                // Load Vosk offline engine
+                // Load Omnilingual offline engine
                 try {
-                    if (!VoskEngine.isReady(this)) VoskEngine.ensureModel(this) {}
+                    if (!OmnilingualEngine.isReady(this)) OmnilingualEngine.ensureModel(this) {}
                 } catch (_: Exception) {}
                 val loaded = try {
-                    VoskEngine.load(this)
+                    OmnilingualEngine.load(this)
                 } catch (_: Exception) {
                     false
                 }
-                if (!loaded && !VoskEngine.isReady(this)) {
+                if (!loaded && !OmnilingualEngine.isReady(this)) {
                     listening.set(false)
                     err(listener, SpeechRecognizer.ERROR_CLIENT)
                     return@Thread

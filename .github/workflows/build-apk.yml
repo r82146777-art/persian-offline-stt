@@ -52,8 +52,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.9.2
-          name: "v3.9.2 - auto text fix, inline emoji, 70k lexicon download with engine"
+          tag_name: v3.10.0
+          name: "v3.10.0 - Omnilingual 300M engine; removed unused dictionary import"
           body: |
             ## نسخه ۳.۶.۰ — موتور جدید Qwen3-ASR
             * موتور اصلی: **Qwen3-ASR 0.6B** (پشتیبانی رسمی فارسی + چند زبان)

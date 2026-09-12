@@ -56,17 +56,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     
-    private val importDictLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri == null) return@registerForActivityResult
-        try {
-            val n = DictCorrection.importFromUri(this, uri)
-            Toast.makeText(this, "دیکشنری وارد شد ($n خط)", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "خطا ورود فایل: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
 
 override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,8 +74,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
             }
         }
         binding.copyButton.setOnClickListener { copyText() }
-        try { DictCorrection.reload(this) } catch (_: Exception) {}
-        try { if (LexiconCorrector.isReady(this)) LexiconCorrector.load(this) } catch (_: Exception) {}
         binding.editButton.setOnClickListener { showEditTextDialog() }
         binding.emojiButton.setOnClickListener { applyEmojis() }
         binding.clearButton.setOnClickListener {
@@ -113,7 +100,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
         return when (item.itemId) {
             R.id.action_language -> { showLanguagePicker(); true }
             R.id.action_settings -> { showSoundSettings(); true }
-            R.id.action_dict -> { showDictEditor(); true }
             R.id.action_help -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.help_title)
@@ -162,52 +148,18 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
 
 
-    private fun showDictEditor() {
-        DictCorrection.reload(this)
-        val file = DictCorrection.dictFile(this)
-        val input = android.widget.EditText(this).apply {
-            setText(try { file.readText() } catch (_: Exception) { "" })
-            minLines = 8
-            maxLines = 16
-            gravity = android.view.Gravity.TOP or android.view.Gravity.START
-            setPadding(32, 24, 32, 24)
-            hint = "اشتباه = درست\nیا فقط عبارت درست"
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("دیکشنری اصلاح آفلاین")
-            .setMessage("ویرایش دستی یا ورود فایل از حافظه (.txt)")
-            .setView(input)
-            .setPositiveButton("ذخیره") { _, _ ->
-                try {
-                    file.writeText(input.text.toString())
-                    DictCorrection.reload(this)
-                    Toast.makeText(this, "ذخیره شد", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(this, "خطا: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNeutralButton("ورود از حافظه") { _, _ ->
-                importDictLauncher.launch("text/*")
-            }
-            .setNegativeButton("لغو", null)
-            .show()
-    }
-
     private fun showEditTextDialog() {
         val current = binding.resultText.text?.toString()?.trim().orEmpty()
         if (current.isBlank()) {
             Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        val fixed = LexiconCorrector.autoCorrect(this, current)
+        // light post-process only
+        val fixed = NumberNormalizer.normalize(PersianPostProcess.fix(current))
         finalText.clear()
         finalText.append(fixed)
         binding.resultText.setText(fixed)
-        if (fixed == current) {
-            Toast.makeText(this, "تغییری لازم نبود", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "متن خودکار اصلاح شد", Toast.LENGTH_SHORT).show()
-        }
+        Toast.makeText(this, if (fixed == current) "تغییری لازم نبود" else "متن اصلاح شد", Toast.LENGTH_SHORT).show()
     }
 
     private fun applyEmojis() {
@@ -282,17 +234,17 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
     private fun prepareModel() {
-        if (VoskEngine.isReady(this)) {
+        if (OmnilingualEngine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
-                    try { VoskEngine.load(this@MainActivity) } catch (_: Throwable) { false }
+                    try { OmnilingualEngine.load(this@MainActivity) } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — موتور Vosk (سبک)"
+                        binding.status.text = "آماده — Omnilingual 300M"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا: ${VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
+                        binding.status.text = "خطا: ${OmnilingualEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -301,7 +253,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور")
-            .setMessage("موتور تشخیص گفتار دانلود شود؟")
+            .setMessage("موتور Omnilingual (~۳۵۰ مگ) دانلود شود؟")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -320,39 +272,21 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.status.text = "دانلود…"
                 withContext(Dispatchers.IO) {
                     try { ShenavaEngine.release() } catch (_: Throwable) {}
+                    try { VoskEngine.release() } catch (_: Throwable) {}
+                    try { OmnilingualEngine.release() } catch (_: Throwable) {}
                     try { Qwen3Engine.release() } catch (_: Throwable) {}
                     try { WhisperEngine.release() } catch (_: Throwable) {}
-                    VoskEngine.ensureModel(this@MainActivity) { pct ->
+                    OmnilingualEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
-                                // model download maps to 0..70
-                                val mapped = (pct * 70) / 100
-                                binding.progress.progress = mapped
+                                binding.progress.progress = pct
                                 binding.status.text = when {
-                                    pct < 86 -> "دانلود موتور $mapped٪"
-                                    pct < 100 -> "استخراج موتور $mapped٪"
-                                    else -> "موتور آماده"
+                                    pct < 86 -> "دانلود $pct٪"
+                                    pct < 100 -> "استخراج $pct٪"
+                                    else -> "آماده"
                                 }
                             }
                         }
-                    }
-                    runOnUiThread {
-                        if (!isFinishing && !isDestroyed) {
-                            binding.status.text = "دانلود دیکشنری کلمات…"
-                        }
-                    }
-                    try {
-                        LexiconCorrector.ensureLexicon(this@MainActivity) { pct ->
-                            runOnUiThread {
-                                if (!isFinishing && !isDestroyed) {
-                                    val mapped = 70 + (pct * 30) / 100
-                                    binding.progress.progress = mapped
-                                    binding.status.text = "دیکشنری $mapped٪"
-                                }
-                            }
-                        }
-                    } catch (_: Exception) {
-                        // lexicon optional — engine still works
                     }
                 }
                 if (isFinishing || isDestroyed) return@launch
@@ -361,9 +295,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = true
                 val ok = withContext(Dispatchers.IO) {
                     try {
-                        VoskEngine.load(this@MainActivity)
+                        OmnilingualEngine.load(this@MainActivity)
                     } catch (_: OutOfMemoryError) {
-                        VoskEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
+                        OmnilingualEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
                         false
                     } catch (_: Throwable) {
                         false
@@ -373,13 +307,13 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — موتور Vosk (سبک)"
+                    binding.status.text = "آماده — Omnilingual 300M"
                     binding.micButton.isEnabled = true
-                } else if (VoskEngine.isReady(this@MainActivity)) {
+                } else if (OmnilingualEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
                     binding.micButton.isEnabled = false
                 } else {
-                    binding.status.text = "خطا: ${VoskEngine.lastError}"
+                    binding.status.text = "خطا: ${OmnilingualEngine.lastError}"
                     binding.micButton.isEnabled = false
                 }
             } catch (e: OutOfMemoryError) {
@@ -390,7 +324,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             } catch (e: Throwable) {
                 if (!isFinishing && !isDestroyed) {
                     binding.progress.visibility = android.view.View.GONE
-                    binding.status.text = "خطا: ${e.message ?: VoskEngine.lastError}"
+                    binding.status.text = "خطا: ${e.message ?: OmnilingualEngine.lastError}"
                 }
             }
         }
@@ -398,7 +332,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!VoskEngine.isReady(this)) {
+        if (!OmnilingualEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -473,11 +407,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — موتور Vosk (سبک)"
+                    binding.status.text = "آماده — Omnilingual 300M"
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — موتور Vosk (سبک)"
+                        binding.status.text = "آماده — Omnilingual 300M"
                     }
                 }, 2500)
             }

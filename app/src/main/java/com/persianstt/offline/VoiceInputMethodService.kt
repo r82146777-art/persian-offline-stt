@@ -95,7 +95,7 @@ class VoiceInputMethodService : InputMethodService() {
             setPadding(4, 6, 4, 6)
         }
         statusView = TextView(this).apply {
-            text = "آفلاین تایپ — موتور Vosk · فشار طولانی فاصله = صوت"
+            text = "آفلاین تایپ — Omni 300M · فشار طولانی فاصله = صوت"
             setTextColor(SUB); textSize = 11f; setPadding(12, 2, 12, 4); gravity = Gravity.CENTER
         }
         root.addView(statusView, lpMW())
@@ -159,7 +159,7 @@ class VoiceInputMethodService : InputMethodService() {
         showClipboard = !showClipboard
         clipboardPanel?.visibility = if (showClipboard) View.VISIBLE else View.GONE
         if (showClipboard) { saveCurrentClipboard(); renderClipboard(); statusView?.text = "کلیپ‌بورد — ضربه = جایگذاری" }
-        else statusView?.text = "آفلاین تایپ — موتور Vosk · فشار طولانی فاصله = صوت"
+        else statusView?.text = "آفلاین تایپ — Omni 300M · فشار طولانی فاصله = صوت"
     }
 
     private fun renderClipboard() {
@@ -313,7 +313,7 @@ class VoiceInputMethodService : InputMethodService() {
         val ic = currentInputConnection ?: return
         val before = try { ic.getTextBeforeCursor(400, 0)?.toString() ?: "" } catch (_: Exception) { "" }
         if (before.isBlank()) return
-        val fixed = LexiconCorrector.autoCorrect(this, before)
+        val fixed = NumberNormalizer.normalize(PersianPostProcess.fix(before))
         if (fixed == before) {
             statusView?.text = "اصلاحی لازم نبود"
             return
@@ -321,13 +321,13 @@ class VoiceInputMethodService : InputMethodService() {
         ic.deleteSurroundingText(before.length, 0)
         ic.commitText(fixed, 1)
         lastCommitted = fixed
-        statusView?.text = "متن خودکار اصلاح شد"
+        statusView?.text = "متن اصلاح شد"
     }
 
     private fun startVoice() {
         if (isListening) return
         isListening = true; pcmChunks.clear()
-        statusView?.text = "🎤 در حال گوش دادن… (موتور Vosk)"
+        statusView?.text = "🎤 در حال گوش دادن… (Omni 300M)"
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         audioRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf * 2)
@@ -363,7 +363,7 @@ class VoiceInputMethodService : InputMethodService() {
                     statusView?.text = "✓ [$engine ${"%.1f".format(secs)}s] $text"
                 } else statusView?.text = "چیزی تشخیص داده نشد (${"%.1f".format(secs)}s صدا=$engine)"
                 mainHandler.postDelayed({
-                    statusView?.text = "آفلاین تایپ — موتور Vosk · فشار طولانی فاصله = صوت"
+                    statusView?.text = "آفلاین تایپ — Omni 300M · فشار طولانی فاصله = صوت"
                 }, 2500)
             }
         }
@@ -374,8 +374,8 @@ class VoiceInputMethodService : InputMethodService() {
         saveCurrentClipboard()
         scope.launch(Dispatchers.IO) {
             try {
-                if (VoskEngine.isReady(this@VoiceInputMethodService)) {
-                    VoskEngine.load(this@VoiceInputMethodService)
+                if (OmnilingualEngine.isReady(this@VoiceInputMethodService)) {
+                    OmnilingualEngine.load(this@VoiceInputMethodService)
                 }
             } catch (_: Exception) {}
         }

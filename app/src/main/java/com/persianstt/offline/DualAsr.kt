@@ -2,7 +2,7 @@ package com.persianstt.offline
 
 import android.content.Context
 
-/** Vosk + lexicon + user dictionary auto-correction. */
+/** Omnilingual 300M primary offline engine. */
 object DualAsr {
 
     fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
@@ -17,14 +17,11 @@ object DualAsr {
         val prepared = pad(AudioPreprocessor.prepare(pcm, sampleRate), sampleRate)
         var text = ""
         try {
-            if (VoskEngine.isReady(context)) {
-                VoskEngine.load(context)
-                text = VoskEngine.transcribe(prepared, sampleRate)
+            if (OmnilingualEngine.isReady(context)) {
+                OmnilingualEngine.load(context)
+                text = OmnilingualEngine.transcribe(prepared, sampleRate)
             }
         } catch (_: Exception) {}
-        if (text.isNotBlank()) {
-            text = LexiconCorrector.autoCorrect(context, text)
-        }
-        return text to if (text.isNotBlank()) "Vosk+Lex" else "none"
+        return text to if (text.isNotBlank()) "Omni" else "none"
     }
 }
