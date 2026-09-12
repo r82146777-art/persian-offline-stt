@@ -14,21 +14,19 @@ import java.net.URL
 import java.util.zip.ZipInputStream
 
 /**
- * Vosk Persian **large** model (vosk-model-fa-0.42 ~1.6GB).
- * Official table: better WER than small-fa (16.7 vs 23.4 on CV).
- * This is a different engine path from Shenava/Whisper/Qwen3.
+ * Vosk Persian **small** model only (~53MB).
+ * Large fa-0.42 caused OOM / whole-phone freeze during prepare.
  */
 object VoskEngine {
 
     private const val TAG = "VoskEngine"
-    private const val FA_NAME = "vosk-model-fa-0.42"
-    private const val FA_URL = "https://alphacephei.com/vosk/models/vosk-model-fa-0.42.zip"
-    // mirror sometimes needed
-    private const val FA_URL_ALT =
-        "https://huggingface.co/alphacep/vosk-model-fa-0.42/resolve/main/vosk-model-fa-0.42.zip"
+    private const val FA_NAME = "vosk-model-small-fa-0.42"
+    private const val FA_URL =
+        "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip"
 
     @Volatile private var model: Model? = null
     @Volatile var lastError: String = ""
+    @Volatile var lastPhase: String = ""
 
     private fun modelsRoot(context: Context): File =
         File(context.applicationContext.filesDir, "vosk-models")
@@ -38,62 +36,67 @@ object VoskEngine {
 
     fun isReady(context: Context): Boolean {
         val dir = modelDir(context)
-        // vosk models need am/ / graph/ or conf/
         if (!dir.isDirectory) return false
-        val marker = File(dir, "am/final.mdl")
-        val marker2 = File(dir, "conf/model.conf")
-        val marker3 = File(dir, "graph/Gr.fst")
-        return (marker.exists() || marker2.exists() || marker3.exists()) &&
-            dir.walkTopDown().any { it.isFile && it.length() > 1_000_000 }
+        // small model structure
+        return dir.listFiles()?.isNotEmpty() == true &&
+            (File(dir, "am").exists() || File(dir, "conf").exists() ||
+                File(dir, "graph").exists() || File(dir, "ivector").exists())
     }
 
+    /** Download + unzip only. Does NOT load Model into RAM. */
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
         if (isReady(context)) {
             onProgress(100)
+            lastPhase = "ready"
             return
         }
         val root = modelsRoot(context)
         if (!root.exists()) root.mkdirs()
-        // remove old small model to free space
+
+        // Delete the huge model that freezes phones
         try {
-            File(root, "vosk-model-small-fa-0.42").deleteRecursively()
-            File(root, "vosk-model-small-en-us-0.15").deleteRecursively()
+            File(root, "vosk-model-fa-0.42").deleteRecursively()
+            File(root, "vosk-model-fa-0.42.zip").delete()
+            File(root, "vosk-model-fa-0.42.zip.part").delete()
         } catch (_: Exception) {}
 
         val zipFile = File(root, "$FA_NAME.zip")
         try {
-            try {
-                downloadResumable(FA_URL, zipFile) { pct -> onProgress((pct * 85) / 100) }
-            } catch (e: Exception) {
-                Log.w(TAG, "primary URL failed, try alt", e)
-                downloadResumable(FA_URL_ALT, zipFile) { pct -> onProgress((pct * 85) / 100) }
-            }
+            lastPhase = "download"
+            downloadResumable(FA_URL, zipFile) { pct -> onProgress((pct * 85) / 100) }
             onProgress(86)
-            if (!zipFile.exists() || zipFile.length() < 50_000_000) {
+            if (!zipFile.exists() || zipFile.length() < 1_000_000) {
                 lastError = "دانلود ناقص"
                 throw IllegalStateException(lastError)
             }
+            lastPhase = "extract"
             unzip(zipFile, root) { p -> onProgress(86 + (p * 12) / 100) }
             onProgress(98)
             try { zipFile.delete() } catch (_: Exception) {}
-            // normalize folder name
+            // rename if zip used different folder name
             root.listFiles()?.forEach { f ->
-                if (f.isDirectory && f.name.startsWith("vosk-model-fa") && f.name != FA_NAME) {
+                if (f.isDirectory && f.name.contains("small-fa") && f.name != FA_NAME) {
                     val dest = File(root, FA_NAME)
                     if (!dest.exists()) f.renameTo(dest)
                 }
             }
+            System.gc()
             if (!isReady(context)) {
-                lastError = "استخراج مدل Vosk ناقص"
+                lastError = "استخراج ناقص"
                 throw IllegalStateException(lastError)
             }
             onProgress(100)
             lastError = ""
+            lastPhase = "extracted"
+        } catch (e: OutOfMemoryError) {
+            lastError = "حافظه کم هنگام آماده‌سازی"
+            try { System.gc() } catch (_: Throwable) {}
+            throw e
         } catch (e: java.net.UnknownHostException) {
             lastError = "اینترنت/DNS قطع"
             throw e
         } catch (e: Exception) {
-            lastError = e.message ?: "خطای دانلود Vosk"
+            lastError = e.message ?: "خطای دانلود"
             throw e
         }
     }
@@ -102,8 +105,8 @@ object VoskEngine {
         val tmp = File(dest.absolutePath + ".part")
         var existing = if (tmp.exists()) tmp.length() else 0L
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 45_000
-            readTimeout = 600_000
+            connectTimeout = 30_000
+            readTimeout = 300_000
             instanceFollowRedirects = true
             if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
         }
@@ -117,11 +120,11 @@ object VoskEngine {
         val totalFromHeader = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
         val total = if (code == 206 && totalFromHeader > 0) existing + totalFromHeader
         else if (totalFromHeader > 0) totalFromHeader else -1L
-        BufferedInputStream(conn.inputStream, 64 * 1024).use { input ->
+        BufferedInputStream(conn.inputStream, 32 * 1024).use { input ->
             FileOutputStream(tmp, existing > 0 && code == 206).use { out ->
                 var done = existing
                 var last = -1
-                val buf = ByteArray(64 * 1024)
+                val buf = ByteArray(32 * 1024)
                 while (true) {
                     val n = input.read(buf)
                     if (n <= 0) break
@@ -147,11 +150,9 @@ object VoskEngine {
     }
 
     private fun unzip(zipFile: File, destRoot: File, onProgress: (Int) -> Unit) {
-        val total = zipFile.length().coerceAtLeast(1)
-        var written = 0L
-        var last = -1
-        ZipInputStream(BufferedInputStream(FileInputStream(zipFile), 64 * 1024)).use { zis ->
-            val buf = ByteArray(64 * 1024)
+        var entries = 0
+        ZipInputStream(BufferedInputStream(FileInputStream(zipFile), 32 * 1024)).use { zis ->
+            val buf = ByteArray(32 * 1024)
             var entry = zis.nextEntry
             while (entry != null) {
                 val name = entry.name
@@ -167,43 +168,44 @@ object VoskEngine {
                     outFile.parentFile?.mkdirs()
                     FileOutputStream(outFile).use { out ->
                         var n: Int
-                        while (zis.read(buf).also { n = it } > 0) {
-                            out.write(buf, 0, n)
-                            written += n
-                        }
+                        while (zis.read(buf).also { n = it } > 0) out.write(buf, 0, n)
                     }
                 }
                 zis.closeEntry()
-                val pct = ((written * 100) / (total * 3)).toInt().coerceIn(0, 99) // zip expands
-                if (pct != last) {
-                    last = pct
-                    onProgress(pct)
+                entries++
+                if (entries % 5 == 0) {
+                    onProgress((entries * 2).coerceIn(0, 99))
                 }
                 entry = zis.nextEntry
             }
         }
+        onProgress(99)
     }
 
     @Synchronized
     fun load(context: Context): Boolean {
         if (model != null) return true
         if (!isReady(context)) {
-            lastError = "مدل Vosk نیست"
+            lastError = "مدل نیست"
             return false
         }
+        lastPhase = "load"
         return try {
             System.gc()
+            Thread.sleep(150)
             model = Model(modelDir(context).absolutePath)
             lastError = ""
+            lastPhase = "loaded"
             true
         } catch (e: OutOfMemoryError) {
             model = null
-            lastError = "حافظه کم برای مدل بزرگ Vosk"
-            Log.e(TAG, "OOM", e)
+            lastError = "حافظه کم — برنامه‌های دیگر را ببندید"
+            Log.e(TAG, "OOM load", e)
+            try { System.gc() } catch (_: Throwable) {}
             false
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             model = null
-            lastError = e.message ?: "خطای بارگذاری Vosk"
+            lastError = e.message ?: "خطای بارگذاری"
             Log.e(TAG, "load", e)
             false
         }
@@ -213,6 +215,7 @@ object VoskEngine {
     fun release() {
         try { model?.close() } catch (_: Exception) {}
         model = null
+        lastPhase = "released"
     }
 
     @Synchronized
@@ -232,6 +235,9 @@ object VoskEngine {
             rec.close()
             val raw = JSONObject(json).optString("text", "").trim()
             NumberNormalizer.normalize(PersianPostProcess.fix(raw))
+        } catch (e: OutOfMemoryError) {
+            lastError = "حافظه کم هنگام تشخیص"
+            ""
         } catch (_: Exception) {
             ""
         }

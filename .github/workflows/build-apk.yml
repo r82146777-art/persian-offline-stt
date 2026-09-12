@@ -52,8 +52,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.8.0
-          name: "v3.8.0 - Vosk large Persian fa-0.42 (better than small)"
+          tag_name: v3.8.1
+          name: "v3.8.1 - Vosk small only, fix prepare crash/OOM"
           body: |
             ## نسخه ۳.۶.۰ — موتور جدید Qwen3-ASR
             * موتور اصلی: **Qwen3-ASR 0.6B** (پشتیبانی رسمی فارسی + چند زبان)

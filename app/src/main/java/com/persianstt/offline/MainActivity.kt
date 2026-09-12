@@ -208,10 +208,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — موتور Vosk فارسی (بزرگ)"
+                        binding.status.text = "آماده — موتور Vosk (سبک)"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا: ${VoskEngine.lastError}"
+                        binding.status.text = "خطا: ${VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -219,8 +219,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور Vosk فارسی")
-            .setMessage("مدل بزرگ رسمی Vosk برای فارسی (vosk-model-fa-0.42).\nدقت بهتر از مدل کوچک نسخهٔ اول.\nحجم حدود ۱.۶ گیگ — یک‌بار دانلود.\n\nدانلود شود؟")
+            .setTitle("دانلود موتور Vosk")
+            .setMessage("مدل سبک فارسی (~۵۰ مگابایت).\nمدل بزرگ قبلی باعث کرش می‌شد و حذف شده است.\n\nدانلود شود؟")
             .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
             .setNegativeButton("لغو") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -236,9 +236,9 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود Vosk…"
+                binding.status.text = "دانلود…"
                 withContext(Dispatchers.IO) {
-                    try { VoskEngine.release() } catch (_: Throwable) {}
+                    try { ShenavaEngine.release() } catch (_: Throwable) {}
                     try { Qwen3Engine.release() } catch (_: Throwable) {}
                     try { WhisperEngine.release() } catch (_: Throwable) {}
                     VoskEngine.ensureModel(this@MainActivity) { pct ->
@@ -246,24 +246,37 @@ class MainActivity : AppCompatActivity() {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
                                 binding.status.text = when {
-                                    pct < 86 -> "دانلود Vosk $pct٪"
+                                    pct < 86 -> "دانلود $pct٪"
                                     pct < 100 -> "استخراج $pct٪"
-                                    else -> "تمام"
+                                    else -> "فایل‌ها آماده"
                                 }
                             }
                         }
                     }
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "بارگذاری…"
+                // Load in a separate step; never kill UI if OOM
+                binding.status.text = "بارگذاری سبک…"
+                binding.progress.isIndeterminate = true
                 val ok = withContext(Dispatchers.IO) {
-                    try { VoskEngine.load(this@MainActivity) } catch (_: Throwable) { false }
+                    try {
+                        VoskEngine.load(this@MainActivity)
+                    } catch (_: OutOfMemoryError) {
+                        VoskEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
+                        false
+                    } catch (_: Throwable) {
+                        false
+                    }
                 }
                 if (isFinishing || isDestroyed) return@launch
+                binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — موتور Vosk فارسی (بزرگ)"
+                    binding.status.text = "آماده — موتور Vosk (سبک)"
                     binding.micButton.isEnabled = true
+                } else if (VoskEngine.isReady(this@MainActivity)) {
+                    binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
+                    binding.micButton.isEnabled = false
                 } else {
                     binding.status.text = "خطا: ${VoskEngine.lastError}"
                     binding.micButton.isEnabled = false
@@ -359,11 +372,11 @@ class MainActivity : AppCompatActivity() {
                     binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — موتور Vosk فارسی (بزرگ)"
+                    binding.status.text = "آماده — موتور Vosk (سبک)"
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — موتور Vosk فارسی (بزرگ)"
+                        binding.status.text = "آماده — موتور Vosk (سبک)"
                     }
                 }, 2500)
             }
