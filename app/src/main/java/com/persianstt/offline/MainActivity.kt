@@ -134,7 +134,7 @@ class MainActivity : AppCompatActivity() {
                 prefs.edit().putString(KEY_LANG, currentLang).apply()
                 updateLangBadge()
                 Toast.makeText(this, R.string.lang_changed, Toast.LENGTH_SHORT).show()
-                Qwen3Engine.release()
+                ShenavaEngine.release()
                 
                 
                 prepareModel()
@@ -201,20 +201,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun prepareModel() {
-        if (Qwen3Engine.isReady(this)) {
+        if (ShenavaEngine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
-                    try { Qwen3Engine.load(this@MainActivity) } catch (_: Throwable) { false }
+                    try { ShenavaEngine.load(this@MainActivity) } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — موتور Qwen3-ASR"
+                        binding.status.text = "آماده — موتور Shenava (کم‌حجم)"
                         binding.micButton.isEnabled = true
-                    } else if (Qwen3Engine.isReady(this@MainActivity)) {
-                        binding.status.text = "مدل هست — یک‌بار اپ را ببندید و باز کنید"
-                        binding.micButton.isEnabled = false
                     } else {
-                        binding.status.text = "خطا بارگذاری: ${Qwen3Engine.lastError}"
+                        binding.status.text = "خطا بارگذاری: ${ShenavaEngine.lastError}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -222,11 +219,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور Qwen3-ASR")
-            .setMessage("موتور جدید چندزبانه با پشتیبانی فارسی (~۸۴۰ مگابایت از GitHub).\nممکن است دقیق‌تر از Whisper باشد.\n\nآیا دانلود شود؟")
+            .setTitle("دانلود موتور فارسی")
+            .setMessage("موتور Shenava Koochik مخصوص فارسی (~۱۰۰ مگابایت).\nحجم و رم خیلی کمتر از Qwen3.\n\nدانلود شود؟")
             .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
             .setNegativeButton("لغو") { _, _ ->
-                binding.status.text = "دانلود لغو شد — برای فعال‌سازی دوباره برنامه را باز کنید"
+                binding.status.text = "دانلود لغو شد"
                 binding.micButton.isEnabled = false
             }
             .setCancelable(false)
@@ -239,85 +236,55 @@ class MainActivity : AppCompatActivity() {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود Qwen3…"
-                // 1) Download + extract only (no neural load yet)
+                binding.status.text = "دانلود Shenava…"
                 withContext(Dispatchers.IO) {
-                    Qwen3Engine.ensureModel(this@MainActivity) { pct ->
+                    // free heavy engines if any
+                    try { ShenavaEngine.release() } catch (_: Throwable) {}
+                    try { WhisperEngine.release() } catch (_: Throwable) {}
+                    ShenavaEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
                                 binding.status.text = when {
-                                    pct < 86 -> "دانلود $pct٪ — قطع نشود"
-                                    pct < 100 -> "استخراج فایل‌ها $pct٪ (ممکن است چند دقیقه طول بکشد)"
-                                    else -> "فایل‌ها آماده شد"
+                                    pct < 86 -> "دانلود $pct٪"
+                                    pct < 100 -> "استخراج $pct٪"
+                                    else -> "تمام"
                                 }
                             }
                         }
                     }
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.status.text = "بارگذاری موتور در حافظه…"
-                binding.progress.isIndeterminate = true
-                // 2) Load separately so OOM doesn't look like download failure
+                binding.status.text = "بارگذاری…"
                 val ok = withContext(Dispatchers.IO) {
-                    try {
-                        Qwen3Engine.load(this@MainActivity)
-                    } catch (e: OutOfMemoryError) {
-                        Qwen3Engine.lastError =
-                            "حافظه کافی نیست. برنامه‌های دیگر را ببندید و اپ را دوباره باز کنید"
-                        false
-                    } catch (_: Throwable) {
-                        false
-                    }
+                    try { ShenavaEngine.load(this@MainActivity) } catch (_: Throwable) { false }
                 }
                 if (isFinishing || isDestroyed) return@launch
-                binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — موتور Qwen3-ASR"
+                    binding.status.text = "آماده — موتور Shenava (کم‌حجم)"
                     binding.micButton.isEnabled = true
-                    Toast.makeText(this@MainActivity, "موتور آماده است", Toast.LENGTH_SHORT).show()
-                } else if (Qwen3Engine.isReady(this@MainActivity)) {
-                    // Files OK but load failed (usually OOM) — recoverable on restart
-                    binding.status.text =
-                        "دانلود کامل شد. یک‌بار برنامه را ببندید و دوباره باز کنید"
-                    binding.micButton.isEnabled = false
-                    Toast.makeText(
-                        this@MainActivity,
-                        Qwen3Engine.lastError.ifBlank {
-                            "بارگذاری نیاز به رم آزاد دارد — اپ را دوباره باز کنید"
-                        },
-                        Toast.LENGTH_LONG
-                    ).show()
                 } else {
-                    val err = Qwen3Engine.lastError.ifBlank { "ناموفق" }
-                    binding.status.text = "خطا: $err"
+                    binding.status.text = "خطا: ${ShenavaEngine.lastError}"
                     binding.micButton.isEnabled = false
-                    Toast.makeText(this@MainActivity, err, Toast.LENGTH_LONG).show()
                 }
             } catch (e: OutOfMemoryError) {
-                if (isFinishing || isDestroyed) return@launch
-                binding.progress.visibility = android.view.View.GONE
-                binding.status.text =
-                    "حافظه کم شد. برنامه‌های دیگر را ببندید و دوباره باز کنید"
-                binding.micButton.isEnabled = false
-            } catch (e: java.net.UnknownHostException) {
-                if (isFinishing || isDestroyed) return@launch
-                binding.progress.visibility = android.view.View.GONE
-                binding.status.text = "اینترنت/DNS قطع — github.com"
-                binding.micButton.isEnabled = false
+                if (!isFinishing && !isDestroyed) {
+                    binding.progress.visibility = android.view.View.GONE
+                    binding.status.text = "حافظه کم — برنامه‌های دیگر را ببندید"
+                }
             } catch (e: Throwable) {
-                if (isFinishing || isDestroyed) return@launch
-                binding.progress.visibility = android.view.View.GONE
-                binding.status.text = "خطا: ${e.message ?: Qwen3Engine.lastError}"
-                binding.micButton.isEnabled = false
+                if (!isFinishing && !isDestroyed) {
+                    binding.progress.visibility = android.view.View.GONE
+                    binding.status.text = "خطا: ${e.message ?: ShenavaEngine.lastError}"
+                }
             }
         }
     }
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!Qwen3Engine.isReady(this)) {
+        if (!ShenavaEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -392,11 +359,11 @@ class MainActivity : AppCompatActivity() {
                     binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — موتور Qwen3-ASR"
+                    binding.status.text = "آماده — موتور Shenava (کم‌حجم)"
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — موتور Qwen3-ASR"
+                        binding.status.text = "آماده — موتور Shenava (کم‌حجم)"
                     }
                 }, 2500)
             }
@@ -429,7 +396,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopListening()
-        Qwen3Engine.release()
+        ShenavaEngine.release()
         
         super.onDestroy()
     }

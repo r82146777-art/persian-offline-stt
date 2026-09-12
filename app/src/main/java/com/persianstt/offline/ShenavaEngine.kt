@@ -30,7 +30,6 @@ object ShenavaEngine {
 
     @Volatile private var recognizer: OfflineRecognizer? = null
     @Volatile var lastError: String = ""
-        private set
 
     private fun modelDir(context: Context): File =
         File(context.applicationContext.filesDir, "shenava-models/$FOLDER")
@@ -77,13 +76,14 @@ object ShenavaEngine {
         if (!dir.exists()) dir.mkdirs()
         val tarFile = File(dir, "model.tar.bz2")
         try {
-            downloadResumable(TAR_URL, tarFile) { pct -> onProgress((pct * 88) / 100) }
-            onProgress(90)
+            downloadResumable(TAR_URL, tarFile) { pct -> onProgress((pct * 85) / 100) }
+            onProgress(86)
             extractTarBz2(tarFile, dir)
-            onProgress(96)
+            onProgress(94)
             try { tarFile.delete() } catch (_: Exception) {}
             flatten(dir)
-            onProgress(99)
+            System.gc()
+            onProgress(98)
             if (!isReady(context)) {
                 lastError = "استخراج مدل ناقص بود"
                 dir.deleteRecursively()
@@ -227,7 +227,7 @@ object ShenavaEngine {
                     ),
                     tokens = tokensFile.absolutePath,
                     modelType = "nemo_ctc",
-                    numThreads = 2,
+                    numThreads = 1,
                     provider = "cpu"
                 ),
                 decodingMethod = "greedy_search"
@@ -236,7 +236,7 @@ object ShenavaEngine {
             lastError = ""
             true
         } catch (oom: OutOfMemoryError) {
-            lastError = "حافظه کم است — برنامه را ببندید و دوباره باز کنید"
+            lastError = "حافظه کم — برنامه‌های دیگر را ببندید و اپ را دوباره باز کنید"
             Log.e(TAG, "OOM loading model", oom)
             recognizer = null
             false
