@@ -104,8 +104,10 @@ class VoiceInputMethodService : InputMethodService() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(4, 2, 4, 4)
         }
-        toolbar.addView(tbBtn("📋 کلیپ‌بورد") { toggleClipboard() })
-        toolbar.addView(tbBtn("🎤 صوت") { if (!isListening) startVoice() else stopVoice() })
+        toolbar.addView(tbBtn("📋") { toggleClipboard() })
+        toolbar.addView(tbBtn("🎤") { if (!isListening) startVoice() else stopVoice() })
+        toolbar.addView(tbBtn("✏️") { editLastCommitted() })
+        toolbar.addView(tbBtn("😊") { insertSmartEmoji() })
         toolbar.addView(tbBtn("⌫") { deleteLast() })
         root.addView(toolbar, lpMW())
         clipboardPanel = LinearLayout(this).apply {
@@ -287,6 +289,41 @@ class VoiceInputMethodService : InputMethodService() {
         } catch (_: Exception) {}
     }
 
+    private var lastCommitted: String = ""
+
+    private fun insertSmartEmoji() {
+        val base = lastCommitted.ifBlank {
+            // try surrounding text
+            try {
+                currentInputConnection?.getTextBeforeCursor(80, 0)?.toString() ?: ""
+            } catch (_: Exception) { "" }
+        }
+        if (base.isBlank()) {
+            commitText("😊")
+            return
+        }
+        val enriched = EmojiHelper.enrich(base.trim())
+        // only append new emojis part
+        val extra = enriched.removePrefix(base.trim()).trim()
+        if (extra.isNotBlank()) commitText(" $extra")
+        else commitText(" ✨")
+    }
+
+    private fun editLastCommitted() {
+        val ic = currentInputConnection ?: return
+        val before = try { ic.getTextBeforeCursor(200, 0)?.toString() ?: "" } catch (_: Exception) { "" }
+        if (before.isBlank()) return
+        // simple: delete last word and allow retype — open nothing in IME context
+        // remove last 1-40 chars word for quick fix
+        val trim = before.trimEnd()
+        val lastSpace = trim.lastIndexOf(' ')
+        val lastWord = if (lastSpace >= 0) trim.substring(lastSpace + 1) else trim
+        if (lastWord.isNotEmpty()) {
+            ic.deleteSurroundingText(lastWord.length, 0)
+            statusView?.text = "ویرایش: کلمه پاک شد — دوباره بنویس/بگو"
+        }
+    }
+
     private fun startVoice() {
         if (isListening) return
         isListening = true; pcmChunks.clear()
@@ -321,6 +358,7 @@ class VoiceInputMethodService : InputMethodService() {
             val secs = raw.size.toFloat() / SAMPLE_RATE
             withContext(Dispatchers.Main) {
                 if (text.isNotBlank()) {
+                    lastCommitted = text
                     currentInputConnection?.commitText(text + " ", 1)
                     statusView?.text = "✓ [$engine ${"%.1f".format(secs)}s] $text"
                 } else statusView?.text = "چیزی تشخیص داده نشد (${"%.1f".format(secs)}s صدا=$engine)"

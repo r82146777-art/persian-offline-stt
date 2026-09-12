@@ -52,8 +52,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.9.0
-          name: "v3.9.0 - Vosk + user dictionary correction for offline accuracy"
+          tag_name: v3.9.1
+          name: "v3.9.1 - dict import from storage, edit+emoji buttons, simple download dialog"
           body: |
             ## نسخه ۳.۶.۰ — موتور جدید Qwen3-ASR
             * موتور اصلی: **Qwen3-ASR 0.6B** (پشتیبانی رسمی فارسی + چند زبان)

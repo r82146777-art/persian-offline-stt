@@ -133,6 +133,22 @@ object DictCorrection {
         return matches.toFloat() / longer.length
     }
 
+    fun importFromUri(context: Context, uri: android.net.Uri): Int {
+        val resolver = context.applicationContext.contentResolver
+        val text = resolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            ?: throw IllegalStateException("خواندن فایل ممکن نشد")
+        val f = dictFile(context)
+        // append imported lines
+        if (f.exists()) f.appendText("
+")
+        f.appendText(text)
+        if (!text.endsWith("
+")) f.appendText("
+")
+        reload(context)
+        return text.lines().count { it.trim().isNotEmpty() && !it.trim().startsWith("#") }
+    }
+
     fun appendEntry(context: Context, line: String) {
         val f = dictFile(context)
         if (!f.exists()) reload(context)

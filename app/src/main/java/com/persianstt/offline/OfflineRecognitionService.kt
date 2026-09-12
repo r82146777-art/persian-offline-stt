@@ -53,7 +53,7 @@ class OfflineRecognitionService : RecognitionService() {
 
         worker = Thread {
             try {
-                // Load ONLY Shenava
+                // Load Vosk offline engine
                 try {
                     if (!VoskEngine.isReady(this)) VoskEngine.ensureModel(this) {}
                 } catch (_: Exception) {}

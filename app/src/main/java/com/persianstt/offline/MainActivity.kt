@@ -17,6 +17,7 @@ import android.view.MenuItem
 import android.widget.CheckBox
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -54,7 +55,20 @@ class MainActivity : AppCompatActivity() {
         private const val CHANNEL_URL = "https://t.me/Akademi_hamdel"
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    
+    private val importDictLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            val n = DictCorrection.importFromUri(this, uri)
+            Toast.makeText(this, "دیکشنری وارد شد ($n خط)", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "خطا ورود فایل: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -72,6 +86,8 @@ class MainActivity : AppCompatActivity() {
         }
         binding.copyButton.setOnClickListener { copyText() }
         try { DictCorrection.reload(this) } catch (_: Exception) {}
+        binding.editButton.setOnClickListener { showEditTextDialog() }
+        binding.emojiButton.setOnClickListener { applyEmojis() }
         binding.clearButton.setOnClickListener {
             finalText.clear()
             binding.resultText.setText("")
@@ -150,31 +166,72 @@ class MainActivity : AppCompatActivity() {
         val file = DictCorrection.dictFile(this)
         val input = android.widget.EditText(this).apply {
             setText(try { file.readText() } catch (_: Exception) { "" })
-            minLines = 10
-            maxLines = 20
+            minLines = 8
+            maxLines = 16
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
             setPadding(32, 24, 32, 24)
             hint = "اشتباه = درست\nیا فقط عبارت درست"
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دیکشنری اصلاح آفلاین")
-            .setMessage("هر خط: عبارت درست\nیا: اشتباه = درست\nبعد از ذخیره، تشخیص با این لیست اصلاح می‌شود.")
+            .setMessage("ویرایش دستی یا ورود فایل از حافظه (.txt)")
             .setView(input)
             .setPositiveButton("ذخیره") { _, _ ->
                 try {
                     file.writeText(input.text.toString())
                     DictCorrection.reload(this)
-                    Toast.makeText(this, "دیکشنری ذخیره شد", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "ذخیره شد", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     Toast.makeText(this, "خطا: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
-            .setNegativeButton("لغو", null)
-            .setNeutralButton("نمونه") { _, _ ->
-                DictCorrection.reload(this)
-                Toast.makeText(this, "فایل نمونه بارگذاری شد — دوباره منو را باز کنید", Toast.LENGTH_LONG).show()
+            .setNeutralButton("ورود از حافظه") { _, _ ->
+                importDictLauncher.launch("text/*")
             }
+            .setNegativeButton("لغو", null)
             .show()
+    }
+
+    private fun showEditTextDialog() {
+        val current = binding.resultText.text?.toString() ?: ""
+        val input = android.widget.EditText(this).apply {
+            setText(current)
+            minLines = 4
+            maxLines = 10
+            setSelection(text.length)
+            setPadding(32, 24, 32, 24)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("اصلاح / ویرایش متن")
+            .setView(input)
+            .setPositiveButton("اعمال") { _, _ ->
+                val fixed = input.text.toString()
+                finalText.clear()
+                finalText.append(fixed)
+                binding.resultText.setText(fixed)
+                // also learn: if user fixed, add map if different
+                if (current.isNotBlank() && fixed.isNotBlank() && current != fixed) {
+                    try {
+                        DictCorrection.appendEntry(this, "$current = $fixed")
+                    } catch (_: Exception) {}
+                }
+                Toast.makeText(this, "متن اصلاح شد", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("لغو", null)
+            .show()
+    }
+
+    private fun applyEmojis() {
+        val current = binding.resultText.text?.toString()?.trim().orEmpty()
+        if (current.isBlank()) {
+            Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val enriched = EmojiHelper.enrich(current)
+        finalText.clear()
+        finalText.append(enriched)
+        binding.resultText.setText(enriched)
+        Toast.makeText(this, "ایموجی اضافه شد", Toast.LENGTH_SHORT).show()
     }
 
     private fun showSoundSettings() {
@@ -254,10 +311,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور Vosk")
-            .setMessage("مدل سبک فارسی (~۵۰ مگابایت).\nمدل بزرگ قبلی باعث کرش می‌شد و حذف شده است.\n\nدانلود شود؟")
-            .setPositiveButton("دانلود") { _, _ -> startModelDownload() }
-            .setNegativeButton("لغو") { _, _ ->
+            .setTitle("دانلود موتور")
+            .setMessage("موتور تشخیص گفتار دانلود شود؟")
+            .setPositiveButton("بله") { _, _ -> startModelDownload() }
+            .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
                 binding.micButton.isEnabled = false
             }
@@ -451,12 +508,27 @@ class MainActivity : AppCompatActivity() {
 
     private fun showDictationHelp() {
         MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.dictation_title)
-            .setMessage(R.string.dictation_body)
-            .setPositiveButton("باز کردن تنظیمات") { _, _ -> openVoiceInputSettings() }
-            .setNegativeButton(R.string.ok, null)
+            .setTitle("دیکته صوتی سیستم")
+            .setMessage(
+                "۱) تنظیمات گوشی → زبان و ورودی (یا سیستم)\n" +
+                "۲) تشخیص گفتار / Speech recognition\n" +
+                "۳) «تایپ صوتی آفلاین فارسی» را انتخاب کنید\n\n" +
+                "مجوز میکروفون باید به این برنامه داده شده باشد.\n" +
+                "در صفحهٔ اصلی و برنامه‌ها مثل دیکتهٔ گوگل کار می‌کند."
+            )
+            .setPositiveButton("باز کردن تنظیمات") { _, _ ->
+                try {
+                    startActivity(Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS))
+                } catch (_: Exception) {
+                    try {
+                        startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+                    } catch (_: Exception) {}
+                }
+            }
+            .setNegativeButton("باشه", null)
             .show()
     }
+
 
     private fun openVoiceInputSettings() {
         val attempts = listOf(
