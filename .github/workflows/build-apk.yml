@@ -52,8 +52,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.10.0
-          name: "v3.10.0 - Omnilingual 300M engine; removed unused dictionary import"
+          tag_name: v3.11.0
+          name: "v3.11.0 - Whisper small forced Persian (fa) language"
           body: |
             ## نسخه ۳.۶.۰ — موتور جدید Qwen3-ASR
             * موتور اصلی: **Qwen3-ASR 0.6B** (پشتیبانی رسمی فارسی + چند زبان)

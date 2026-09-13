@@ -15,7 +15,7 @@ import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * System RecognitionService — Omnilingual 300M CTC offline.
+ * System RecognitionService — Whisper small, language forced to fa.
  * Runs in a separate process to avoid OEM permission bugs.
  */
 class OfflineRecognitionService : RecognitionService() {
@@ -55,14 +55,14 @@ class OfflineRecognitionService : RecognitionService() {
             try {
                 // Load Omnilingual offline engine
                 try {
-                    if (!OmnilingualEngine.isReady(this)) OmnilingualEngine.ensureModel(this) {}
+                    if (!WhisperEngine.isReady(this)) WhisperEngine.ensureModel(this) {}
                 } catch (_: Exception) {}
                 val loaded = try {
-                    OmnilingualEngine.load(this)
+                    WhisperEngine.load(this, "fa")
                 } catch (_: Exception) {
                     false
                 }
-                if (!loaded && !OmnilingualEngine.isReady(this)) {
+                if (!loaded && !WhisperEngine.isReady(this)) {
                     listening.set(false)
                     err(listener, SpeechRecognizer.ERROR_CLIENT)
                     return@Thread

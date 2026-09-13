@@ -2,7 +2,7 @@ package com.persianstt.offline
 
 import android.content.Context
 
-/** Omnilingual 300M primary offline engine. */
+/** Whisper small with language forced to Persian (fa). */
 object DualAsr {
 
     fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
@@ -17,11 +17,11 @@ object DualAsr {
         val prepared = pad(AudioPreprocessor.prepare(pcm, sampleRate), sampleRate)
         var text = ""
         try {
-            if (OmnilingualEngine.isReady(context)) {
-                OmnilingualEngine.load(context)
-                text = OmnilingualEngine.transcribe(prepared, sampleRate)
+            if (WhisperEngine.isReady(context)) {
+                WhisperEngine.load(context, "fa")
+                text = WhisperEngine.transcribe(prepared, sampleRate)
             }
         } catch (_: Exception) {}
-        return text to if (text.isNotBlank()) "Omni" else "none"
+        return text to if (text.isNotBlank()) "Whisper-fa" else "none"
     }
 }

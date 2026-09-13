@@ -234,17 +234,17 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
     private fun prepareModel() {
-        if (OmnilingualEngine.isReady(this)) {
+        if (WhisperEngine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
-                    try { OmnilingualEngine.load(this@MainActivity) } catch (_: Throwable) { false }
+                    try { WhisperEngine.load(this@MainActivity, "fa") } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — Omnilingual 300M"
+                        binding.status.text = "آماده — Whisper فارسی (زبان قفل fa)"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا: ${OmnilingualEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
+                        binding.status.text = "خطا: ${WhisperEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -253,7 +253,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور")
-            .setMessage("موتور Omnilingual (~۳۵۰ مگ) دانلود شود؟")
+            .setMessage("موتور Whisper (~۴۶۰ مگ، زبان فارسی) دانلود شود؟")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -273,10 +273,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 withContext(Dispatchers.IO) {
                     try { ShenavaEngine.release() } catch (_: Throwable) {}
                     try { VoskEngine.release() } catch (_: Throwable) {}
-                    try { OmnilingualEngine.release() } catch (_: Throwable) {}
+                    try { WhisperEngine.release() } catch (_: Throwable) {}
                     try { Qwen3Engine.release() } catch (_: Throwable) {}
                     try { WhisperEngine.release() } catch (_: Throwable) {}
-                    OmnilingualEngine.ensureModel(this@MainActivity) { pct ->
+                    WhisperEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
@@ -295,9 +295,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = true
                 val ok = withContext(Dispatchers.IO) {
                     try {
-                        OmnilingualEngine.load(this@MainActivity)
+                        WhisperEngine.load(this@MainActivity, "fa")
                     } catch (_: OutOfMemoryError) {
-                        OmnilingualEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
+                        WhisperEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
                         false
                     } catch (_: Throwable) {
                         false
@@ -307,13 +307,13 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — Omnilingual 300M"
+                    binding.status.text = "آماده — Whisper فارسی (زبان قفل fa)"
                     binding.micButton.isEnabled = true
-                } else if (OmnilingualEngine.isReady(this@MainActivity)) {
+                } else if (WhisperEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
                     binding.micButton.isEnabled = false
                 } else {
-                    binding.status.text = "خطا: ${OmnilingualEngine.lastError}"
+                    binding.status.text = "خطا: ${WhisperEngine.lastError}"
                     binding.micButton.isEnabled = false
                 }
             } catch (e: OutOfMemoryError) {
@@ -324,7 +324,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             } catch (e: Throwable) {
                 if (!isFinishing && !isDestroyed) {
                     binding.progress.visibility = android.view.View.GONE
-                    binding.status.text = "خطا: ${e.message ?: OmnilingualEngine.lastError}"
+                    binding.status.text = "خطا: ${e.message ?: WhisperEngine.lastError}"
                 }
             }
         }
@@ -332,7 +332,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!OmnilingualEngine.isReady(this)) {
+        if (!WhisperEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -407,11 +407,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — Omnilingual 300M"
+                    binding.status.text = "آماده — Whisper فارسی (زبان قفل fa)"
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — Omnilingual 300M"
+                        binding.status.text = "آماده — Whisper فارسی (زبان قفل fa)"
                     }
                 }, 2500)
             }
