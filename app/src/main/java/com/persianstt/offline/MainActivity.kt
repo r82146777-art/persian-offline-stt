@@ -374,21 +374,34 @@ override fun onCreate(savedInstanceState: Bundle?) {
     private fun stopListening() {
         synchronized(stopLock) {
             if (!isListening) return
-            isListening = false
-            listenJob?.cancel()
-            try {
-                audioRecord?.stop()
-                audioRecord?.release()
-            } catch (_: Exception) {}
-            audioRecord = null
         }
         if (!isFinishing && !isDestroyed) {
             binding.micButton.text = getString(R.string.btn_mic)
             binding.status.text = "در حال تشخیص…"
         }
-        val chunks = pcmChunks.toList()
-        pcmChunks.clear()
         lifecycleScope.launch(Dispatchers.IO) {
+            // 0.6s more capture so end of word/number is not lost
+            try { kotlinx.coroutines.delay(600) } catch (_: Exception) {}
+            synchronized(stopLock) {
+                isListening = false
+                listenJob?.cancel()
+                try {
+                    val ar = audioRecord
+                    if (ar != null) {
+                        try {
+                            val tail = ShortArray(SAMPLE_RATE / 2)
+                            val n = ar.read(tail, 0, tail.size)
+                            if (n > 0) pcmChunks.add(tail.copyOf(n))
+                        } catch (_: Exception) {}
+                    }
+                    try { audioRecord?.stop() } catch (_: Exception) {}
+                    try { audioRecord?.release() } catch (_: Exception) {}
+                    audioRecord = null
+                } catch (_: Exception) {}
+            }
+            val chunks = pcmChunks.toList()
+            pcmChunks.clear()
+
             val total = chunks.sumOf { it.size }
             val pcm = ShortArray(total)
             var o = 0
