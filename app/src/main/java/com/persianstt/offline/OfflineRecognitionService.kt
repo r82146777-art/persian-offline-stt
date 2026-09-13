@@ -15,7 +15,7 @@ import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * System RecognitionService — Whisper small, language forced to fa.
+ * System RecognitionService — Hamdel engine (Shenava + PersianCorrector).
  * Runs in a separate process to avoid OEM permission bugs.
  */
 class OfflineRecognitionService : RecognitionService() {
@@ -55,14 +55,14 @@ class OfflineRecognitionService : RecognitionService() {
             try {
                 // Load Omnilingual offline engine
                 try {
-                    if (!WhisperEngine.isReady(this)) WhisperEngine.ensureModel(this) {}
+                    if (!HamdelEngine.isReady(this)) HamdelEngine.ensureModel(this) {}
                 } catch (_: Exception) {}
                 val loaded = try {
-                    WhisperEngine.load(this, "fa")
+                    HamdelEngine.load(this)
                 } catch (_: Exception) {
                     false
                 }
-                if (!loaded && !WhisperEngine.isReady(this)) {
+                if (!loaded && !HamdelEngine.isReady(this)) {
                     listening.set(false)
                     err(listener, SpeechRecognizer.ERROR_CLIENT)
                     return@Thread

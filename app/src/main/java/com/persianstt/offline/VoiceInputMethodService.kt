@@ -95,7 +95,7 @@ class VoiceInputMethodService : InputMethodService() {
             setPadding(4, 6, 4, 6)
         }
         statusView = TextView(this).apply {
-            text = "آفلاین تایپ — Whisper-fa · فشار طولانی فاصله = صوت"
+            text = "آفلاین تایپ — همدل · فشار طولانی فاصله = صوت"
             setTextColor(SUB); textSize = 11f; setPadding(12, 2, 12, 4); gravity = Gravity.CENTER
         }
         root.addView(statusView, lpMW())
@@ -159,7 +159,7 @@ class VoiceInputMethodService : InputMethodService() {
         showClipboard = !showClipboard
         clipboardPanel?.visibility = if (showClipboard) View.VISIBLE else View.GONE
         if (showClipboard) { saveCurrentClipboard(); renderClipboard(); statusView?.text = "کلیپ‌بورد — ضربه = جایگذاری" }
-        else statusView?.text = "آفلاین تایپ — Whisper-fa · فشار طولانی فاصله = صوت"
+        else statusView?.text = "آفلاین تایپ — همدل · فشار طولانی فاصله = صوت"
     }
 
     private fun renderClipboard() {
@@ -327,7 +327,7 @@ class VoiceInputMethodService : InputMethodService() {
     private fun startVoice() {
         if (isListening) return
         isListening = true; pcmChunks.clear()
-        statusView?.text = "🎤 در حال گوش دادن… (Whisper-fa)"
+        statusView?.text = "🎤 در حال گوش دادن… (همدل)"
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
         val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         audioRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf * 2)
@@ -363,7 +363,7 @@ class VoiceInputMethodService : InputMethodService() {
                     statusView?.text = "✓ [$engine ${"%.1f".format(secs)}s] $text"
                 } else statusView?.text = "چیزی تشخیص داده نشد (${"%.1f".format(secs)}s صدا=$engine)"
                 mainHandler.postDelayed({
-                    statusView?.text = "آفلاین تایپ — Whisper-fa · فشار طولانی فاصله = صوت"
+                    statusView?.text = "آفلاین تایپ — همدل · فشار طولانی فاصله = صوت"
                 }, 2500)
             }
         }
@@ -374,8 +374,8 @@ class VoiceInputMethodService : InputMethodService() {
         saveCurrentClipboard()
         scope.launch(Dispatchers.IO) {
             try {
-                if (WhisperEngine.isReady(this@VoiceInputMethodService)) {
-                    WhisperEngine.load(this@VoiceInputMethodService, "fa")
+                if (HamdelEngine.isReady(this@VoiceInputMethodService)) {
+                    HamdelEngine.load(this@VoiceInputMethodService)
                 }
             } catch (_: Exception) {}
         }
