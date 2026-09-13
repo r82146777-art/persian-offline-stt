@@ -241,7 +241,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — موتور همدل"
+                        binding.status.text = "آماده — همدل مرحله ۱ (کلمات ساده)"
                         binding.micButton.isEnabled = true
                     } else {
                         binding.status.text = "خطا: ${HamdelEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
@@ -253,7 +253,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور")
-            .setMessage("موتور همدل (~۱۰۰ مگ) دانلود شود؟")
+            .setMessage("موتور همدل مرحله ۱ (~۱۰۰ مگ) دانلود شود؟\nاول کلمات ساده را تمرین می‌کنیم.")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -307,7 +307,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — موتور همدل"
+                    binding.status.text = "آماده — همدل مرحله ۱ (کلمات ساده)"
                     binding.micButton.isEnabled = true
                 } else if (HamdelEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
@@ -407,11 +407,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — موتور همدل"
+                    binding.status.text = "آماده — همدل مرحله ۱ (کلمات ساده)"
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — موتور همدل"
+                        binding.status.text = "آماده — همدل مرحله ۱ (کلمات ساده)"
                     }
                 }, 2500)
             }

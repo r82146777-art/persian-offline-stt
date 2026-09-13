@@ -2,175 +2,100 @@ package com.persianstt.offline
 
 import android.content.Context
 import android.util.Log
-import java.io.File
 
 /**
- * مغز متنی موتور همدل — حدود ۵۰ هزار کلمه/عبارت درست + قواعد اصلاح.
+ * مرحله ۱: تمرکز روی کلمات ساده.
+ * اول SimpleVocab، بعد مغز ۵۰هزارتایی برای چسباندن کلمات شکسته.
  */
 object PersianCorrector {
 
     private const val TAG = "PersianCorrector"
-    private const val BRAIN_ASSET = "hamdel_brain.txt"
-    private const val BRAIN_FILE = "hamdel_brain.txt"
-
-    @Volatile private var words: Set<String> = emptySet()
-    @Volatile private var byCompact: Map<String, String> = emptyMap()
-    @Volatile private var loaded = false
-
-    private val phrases = listOf(
-        "عرز سلام عدابه احترام خدمته تمام د شتانه عزی" to "عرض سلام و ادب و احترام خدمت تمام دوستان عزیز",
-        "عرز سلام عدابه احترام" to "عرض سلام و ادب و احترام",
-        "عرز سلام عداب احترام" to "عرض سلام و ادب و احترام",
-        "عرض سلام عدابه احترام" to "عرض سلام و ادب و احترام",
-        "ارزی سلا م اتاب اختر" to "عرض سلام و ادب و احترام",
-        "ارزی سلام اتاب اختر" to "عرض سلام و ادب و احترام",
-        "عرضسلامادباحتر" to "عرض سلام و ادب و احترام",
-        "عرض سلام ادب احترام" to "عرض سلام و ادب و احترام",
-        "عرض سلام و ادب احترام" to "عرض سلام و ادب و احترام",
-        "خدمته تمام د شتانه عزی" to "خدمت تمام دوستان عزیز",
-        "خدمته تمام دوستان عزی" to "خدمت تمام دوستان عزیز",
-        "خدمت تمام د شتانه عزی" to "خدمت تمام دوستان عزیز",
-        "د شتانه عزی" to "دوستان عزیز",
-        "دشتانه عزیز" to "دوستان عزیز",
-        "شتانه عزی" to "دوستان عزیز",
-        "سلام ها عرضه ا" to "سلام و عرض ادب",
-        "سلام عرض ادب" to "سلام و عرض ادب",
-        "عرضسلام" to "عرض سلام",
-        "عدابه احترام" to "ادب و احترام",
-        "عداب احترام" to "ادب و احترام",
-        "اتاب اختر" to "ادب و احترام",
-        "اتاب احترام" to "ادب و احترام",
-        "خواهش میکنم" to "خواهش می‌کنم",
-        "خواهش می کنم" to "خواهش می‌کنم"
-    ).sortedByDescending { it.first.length }
-
-    private val tokens = listOf(
-        "عرز" to "عرض",
-        "عدابه" to "ادب",
-        "عداب" to "ادب",
-        "اتاب" to "ادب",
-        "اختر" to "احترام",
-        "خدمته" to "خدمت",
-        "عزی" to "عزیز"
-    )
 
     fun ensureLoaded(context: Context) {
-        if (loaded && words.isNotEmpty()) return
-        synchronized(this) {
-            if (loaded && words.isNotEmpty()) return
-            try {
-                val f = File(context.applicationContext.filesDir, BRAIN_FILE)
-                if (!f.exists() || f.length() < 100_000) {
-                    context.applicationContext.assets.open(BRAIN_ASSET).use { input ->
-                        f.outputStream().use { output -> input.copyTo(output) }
-                    }
-                }
-                val set = HashSet<String>(60_000)
-                val compact = HashMap<String, String>(60_000)
-                f.bufferedReader().useLines { lines ->
-                    lines.forEach { line0 ->
-                        val w = line0.trim()
-                        if (w.isEmpty() || w.startsWith("#")) return@forEach
-                        set.add(w)
-                        val c = w.replace(" ", "").replace("\u200c", "")
-                        if (c.length in 2..40 && !compact.containsKey(c)) {
-                            compact[c] = w
-                        }
-                    }
-                }
-                words = set
-                byCompact = compact
-                loaded = true
-                Log.i(TAG, "brain loaded: ${words.size} entries")
-            } catch (e: Exception) {
-                Log.e(TAG, "brain load failed", e)
-                loaded = true // avoid retry storm
-            }
+        // brain optional for stage-1; still load for join-broken
+        try {
+            BrainLexicon.ensureLoaded(context)
+        } catch (e: Exception) {
+            Log.w(TAG, "brain optional fail", e)
         }
     }
 
     fun fix(context: Context?, raw: String): String {
         if (raw.isBlank()) return raw
         if (context != null) ensureLoaded(context)
-        var t = raw.trim()
-            .replace('\u200c', ' ')
-            .replace(Regex("[\\u064B-\\u065F]"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
 
+        var t = SimpleVocab.normalizeKey(raw)
         t = joinSpacedLetters(t)
 
-        for ((bad, good) in phrases) {
-            if (t.contains(bad)) t = t.replace(bad, good)
-        }
+        // 1) exact / compact map from simple vocab
+        val compact = t.replace(" ", "")
+        SimpleVocab.map[t]?.let { return finalize(it) }
+        SimpleVocab.map[compact]?.let { return finalize(it) }
 
-        // join broken words using brain (سلا م → سلام)
-        t = joinBrokenWords(t)
+        // 2) if whole text is almost a simple phrase, complete it
+        completePrefix(t)?.let { return finalize(it) }
 
-        val parts = t.split(' ').toMutableList()
+        // 3) token-by-token simple vocab
+        val parts = t.split(' ').filter { it.isNotEmpty() }.toMutableList()
         for (i in parts.indices) {
             val w = parts[i]
-            if (w.isEmpty()) continue
-            if (words.contains(w)) continue
-            var hit = false
-            for ((bad, good) in tokens) {
-                if (w == bad) {
-                    parts[i] = good
-                    hit = true
-                    break
-                }
-            }
-            if (hit) continue
-            val c = w.replace("\u200c", "")
-            val mapped = byCompact[c]
-            if (mapped != null) parts[i] = mapped
+            val fixed = SimpleVocab.map[w] ?: SimpleVocab.map[w.replace(" ", "")]
+            if (fixed != null) parts[i] = fixed
         }
         t = parts.joinToString(" ")
-        t = joinBrokenWords(t)
 
-        for ((bad, good) in phrases) {
-            if (t.contains(bad)) t = t.replace(bad, good)
-        }
+        // 4) phrase rules again after tokens
+        SimpleVocab.map[t]?.let { return finalize(it) }
+        completePrefix(t)?.let { return finalize(it) }
 
-        t = NumberNormalizer.normalize(PersianPostProcess.fix(t))
-        return t.replace(Regex("\\s+"), " ").trim()
+        // 5) join broken via big brain if available
+        t = BrainLexicon.joinBroken(t)
+
+        // 6) final simple map
+        SimpleVocab.map[t]?.let { return finalize(it) }
+        completePrefix(t)?.let { return finalize(it) }
+
+        return finalize(t)
     }
 
-    /** Backward-compatible without context */
     fun fix(raw: String): String = fix(null, raw)
 
-    private fun joinBrokenWords(text: String): String {
-        if (byCompact.isEmpty() && words.isEmpty()) return text
-        val tokens = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
-        if (tokens.size < 2) return text
-        val out = mutableListOf<String>()
-        var i = 0
-        while (i < tokens.size) {
-            var best = tokens[i]
-            var bestLen = 1
-            var merged = tokens[i]
-            for (n in 2..4) {
-                if (i + n - 1 >= tokens.size) break
-                merged += tokens[i + n - 1]
-                val compact = merged.replace("\u200c", "")
-                when {
-                    words.contains(merged) -> {
-                        best = merged; bestLen = n
-                    }
-                    byCompact.containsKey(compact) -> {
-                        best = byCompact[compact]!!; bestLen = n
-                    }
-                }
+    /** اگر متن کوتاه پیشوند یک عبارت ساده باشد → کاملش کن */
+    private fun completePrefix(t: String): String? {
+        if (t.length < 2) return null
+        val c = t.replace(" ", "")
+        // direct partials users hit
+        val hard = mapOf(
+            "عرضه سل" to "عرض سلام",
+            "عرضهسلا" to "عرض سلام",
+            "عرض سل" to "عرض سلام",
+            "عرز سلا" to "عرض سلام",
+            "عرض سلا" to "عرض سلام",
+            "سلا" to "سلام",
+            "سل" to "سلام"
+        )
+        hard[t]?.let { return it }
+        hard[c]?.let { return it }
+
+        for (phrase in SimpleVocab.correctPhrases) {
+            val pc = phrase.replace(" ", "")
+            if (pc.startsWith(c) && c.length * 2 >= pc.length) {
+                // e.g. typed half of phrase
+                return phrase
             }
-            out.add(best)
-            i += bestLen
+            if (c.startsWith(pc.take(c.length.coerceAtMost(pc.length))) &&
+                c.length >= 4 && phrase.startsWith(t.take(2))
+            ) {
+                // weak — only if very close length
+                if (kotlin.math.abs(pc.length - c.length) <= 3) return phrase
+            }
         }
-        return out.joinToString(" ")
+        return null
     }
 
     private fun joinSpacedLetters(s: String): String {
         val parts = s.split(' ')
-        if (parts.size < 3) return s
+        if (parts.size < 2) return s
         val out = mutableListOf<String>()
         var i = 0
         while (i < parts.size) {
@@ -179,12 +104,17 @@ object PersianCorrector {
                 while (i < parts.size && parts[i].length == 1) {
                     buf.append(parts[i]); i++
                 }
-                val joined = buf.toString()
-                out.add(byCompact[joined] ?: joined)
+                val j = buf.toString()
+                out.add(SimpleVocab.map[j] ?: j)
             } else {
                 out.add(parts[i]); i++
             }
         }
         return out.joinToString(" ")
+    }
+
+    private fun finalize(s: String): String {
+        var t = NumberNormalizer.normalize(PersianPostProcess.fix(s))
+        return t.replace(Regex("\\s+"), " ").trim()
     }
 }
