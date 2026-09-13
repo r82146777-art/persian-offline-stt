@@ -52,8 +52,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.13.2
-          name: "v3.13.2 - fix truncated word/digit endings with tail capture"
+          tag_name: v3.13.3
+          name: "v3.13.3 - fix empty recognition + clearer dictation help"
           body: |
             ## نسخه ۳.۶.۰ — موتور جدید Qwen3-ASR
             * موتور اصلی: **Qwen3-ASR 0.6B** (پشتیبانی رسمی فارسی + چند زبان)

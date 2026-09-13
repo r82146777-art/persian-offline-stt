@@ -52,7 +52,7 @@ object HamdelEngine {
             lastError = e.message ?: "خطای تشخیص"
             ""
         }
-        if (raw.isBlank()) return ""
+        if (raw.isBlank()) { lastError = ShenavaEngine.lastError.ifBlank { "خروجی خالی موتور صوتی" }; return "" }
         val fixed = PersianCorrector.fix(appCtx, raw)
         Log.i(TAG, "raw=[$raw] fixed=[$fixed]")
         return fixed

@@ -349,10 +349,11 @@ class VoiceInputMethodService : InputMethodService() {
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 60) } catch (_: Exception) {}
         statusView?.text = "در حال تشخیص…"
         scope.launch(Dispatchers.IO) {
-            try { kotlinx.coroutines.delay(600) } catch (_: Exception) {}
+            try { kotlinx.coroutines.delay(500) } catch (_: Exception) {}
+            val job = listenJob
+            synchronized(stopLock) { isListening = false }
+            try { job?.join() } catch (_: Exception) {}
             synchronized(stopLock) {
-                isListening = false
-                listenJob?.cancel()
                 try {
                     val ar = audioRecord
                     if (ar != null) {
@@ -366,6 +367,7 @@ class VoiceInputMethodService : InputMethodService() {
                     try { audioRecord?.release() } catch (_: Exception) {}
                     audioRecord = null
                 } catch (_: Exception) {}
+                listenJob = null
             }
             val raw = pcmChunks.flatMap { it.toList() }.toShortArray(); pcmChunks.clear()
             val (text0, engine) = DualAsr.transcribe(this@VoiceInputMethodService, raw, SAMPLE_RATE)

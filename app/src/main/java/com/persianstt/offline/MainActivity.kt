@@ -378,55 +378,73 @@ override fun onCreate(savedInstanceState: Bundle?) {
         if (!isFinishing && !isDestroyed) {
             binding.micButton.text = getString(R.string.btn_mic)
             binding.status.text = "در حال تشخیص…"
+            binding.micButton.isEnabled = false
         }
         lifecycleScope.launch(Dispatchers.IO) {
-            // 0.6s more capture so end of word/number is not lost
-            try { kotlinx.coroutines.delay(600) } catch (_: Exception) {}
+            // keep mic open a bit so last phonemes arrive
+            try { kotlinx.coroutines.delay(500) } catch (_: Exception) {}
+            val job = listenJob
             synchronized(stopLock) {
                 isListening = false
-                listenJob?.cancel()
+            }
+            // let the reader loop exit cleanly (don't cancel mid-read)
+            try { job?.join() } catch (_: Exception) {}
+            synchronized(stopLock) {
                 try {
                     val ar = audioRecord
                     if (ar != null) {
                         try {
                             val tail = ShortArray(SAMPLE_RATE / 2)
-                            val n = ar.read(tail, 0, tail.size)
-                            if (n > 0) pcmChunks.add(tail.copyOf(n))
+                            var got = 0
+                            // drain up to ~0.5s
+                            while (got < tail.size) {
+                                val n = ar.read(tail, got, (tail.size - got).coerceAtMost(SAMPLE_RATE / 10))
+                                if (n <= 0) break
+                                got += n
+                            }
+                            if (got > 0) pcmChunks.add(tail.copyOf(got))
                         } catch (_: Exception) {}
                     }
                     try { audioRecord?.stop() } catch (_: Exception) {}
                     try { audioRecord?.release() } catch (_: Exception) {}
                     audioRecord = null
                 } catch (_: Exception) {}
+                listenJob = null
             }
             val chunks = pcmChunks.toList()
             pcmChunks.clear()
-
             val total = chunks.sumOf { it.size }
-            val pcm = ShortArray(total)
-            var o = 0
-            for (c in chunks) {
-                System.arraycopy(c, 0, pcm, o, c.size)
-                o += c.size
-            }
+            val pcm = if (total > 0) {
+                val arr = ShortArray(total)
+                var o = 0
+                for (c in chunks) {
+                    System.arraycopy(c, 0, arr, o, c.size)
+                    o += c.size
+                }
+                arr
+            } else ShortArray(0)
+
             val (text, engine) = DualAsr.transcribe(this@MainActivity, pcm, SAMPLE_RATE)
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
+                binding.micButton.isEnabled = true
                 if (text.isNotBlank()) {
                     if (finalText.isNotEmpty()) finalText.append(" ")
                     finalText.append(text)
                     binding.resultText.setText(finalText.toString())
                     binding.resultText.setSelection(binding.resultText.text.length)
-                    binding.status.text = "✓ [$engine] $text"
+                    binding.status.text = "✓ $text"
                 } else {
-                    Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — همدل — واژگان ~۵۰هزار"
+                    val sec = total.toFloat() / SAMPLE_RATE
+                    val msg = "چیزی تشخیص داده نشد (${"%.1f".format(sec)}s · $engine)"
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                    binding.status.text = msg
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — همدل — واژگان ~۵۰هزار"
+                        binding.status.text = "آماده — تایپ صوتی آفلاین / دیکته"
                     }
-                }, 2500)
+                }, 3000)
             }
         }
     }
@@ -464,13 +482,14 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
     private fun showDictationHelp() {
         MaterialAlertDialogBuilder(this)
-            .setTitle("دیکته صوتی سیستم")
+            .setTitle("دیکته صوتی (سیستم)")
             .setMessage(
-                "۱) تنظیمات گوشی → زبان و ورودی (یا سیستم)\n" +
-                "۲) تشخیص گفتار / Speech recognition\n" +
+                "برای دیکته در واتساپ، پیام‌رسان و هر برنامه:\n\n" +
+                "۱) تنظیمات گوشی → زبان و ورودی / سیستم\n" +
+                "۲) تشخیص گفتار / Speech services\n" +
                 "۳) «تایپ صوتی آفلاین فارسی» را انتخاب کنید\n\n" +
-                "مجوز میکروفون باید به این برنامه داده شده باشد.\n" +
-                "در صفحهٔ اصلی و برنامه‌ها مثل دیکتهٔ گوگل کار می‌کند."
+                "مجوز میکروفون باید داده شده باشد.\n" +
+                "داخل خود این برنامه هم دکمه میکروفون = تایپ صوتی آفلاین است."
             )
             .setPositiveButton("باز کردن تنظیمات") { _, _ ->
                 try {
@@ -484,7 +503,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
             .setNegativeButton("باشه", null)
             .show()
     }
-
 
     private fun openVoiceInputSettings() {
         val attempts = listOf(
