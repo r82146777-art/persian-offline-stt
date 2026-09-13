@@ -83,11 +83,12 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
 
         binding.dictationButton.setOnClickListener { showDictationHelp() }
-        binding.root.findViewById<android.view.View>(R.id.btn_enable_ime)?.setOnClickListener {
-            setupKeyboardFlow()
-        }
-        // if only one obvious path - long press status for keyboard setup
+        // long-press status → keyboard setup
         binding.status.setOnLongClickListener {
+            setupKeyboardFlow()
+            true
+        }
+        binding.dictationButton.setOnLongClickListener {
             setupKeyboardFlow()
             true
         }
@@ -306,11 +307,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 val ok = withContext(Dispatchers.IO) {
                     try {
                         System.gc()
-                        try {
-                            HamdelEngine.load(this@MainActivity)
-                        } catch (_: Throwable) {
-                            HamdelEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
-                        }
+                        HamdelEngine.load(this@MainActivity)
                     } catch (_: OutOfMemoryError) {
                         HamdelEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
                         false
