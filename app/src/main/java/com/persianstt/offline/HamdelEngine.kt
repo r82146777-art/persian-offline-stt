@@ -12,12 +12,14 @@ object HamdelEngine {
 
     private const val TAG = "HamdelEngine"
     @Volatile var lastError: String = ""
+    @Volatile private var appCtx: Context? = null
 
     fun isReady(context: Context): Boolean = ShenavaEngine.isReady(context)
 
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
         try {
             ShenavaEngine.ensureModel(context, onProgress)
+            try { PersianCorrector.ensureLoaded(context) } catch (_: Exception) {}
             lastError = ShenavaEngine.lastError
         } catch (e: Exception) {
             lastError = e.message ?: ShenavaEngine.lastError
@@ -26,6 +28,8 @@ object HamdelEngine {
     }
 
     fun load(context: Context): Boolean {
+        appCtx = context.applicationContext
+        try { PersianCorrector.ensureLoaded(context) } catch (_: Exception) {}
         val ok = try {
             ShenavaEngine.load(context)
         } catch (e: Exception) {
@@ -49,7 +53,7 @@ object HamdelEngine {
             ""
         }
         if (raw.isBlank()) return ""
-        val fixed = PersianCorrector.fix(raw)
+        val fixed = PersianCorrector.fix(appCtx, raw)
         Log.i(TAG, "raw=[$raw] fixed=[$fixed]")
         return fixed
     }
