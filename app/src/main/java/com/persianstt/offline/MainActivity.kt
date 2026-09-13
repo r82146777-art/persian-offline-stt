@@ -241,7 +241,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — همدل مرحله ۱ (کلمات ساده)"
+                        binding.status.text = "آماده — همدل — واژگان ~۵۰هزار"
                         binding.micButton.isEnabled = true
                     } else {
                         binding.status.text = "خطا: ${HamdelEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
@@ -307,7 +307,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — همدل مرحله ۱ (کلمات ساده)"
+                    binding.status.text = "آماده — همدل — واژگان ~۵۰هزار"
                     binding.micButton.isEnabled = true
                 } else if (HamdelEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
@@ -407,11 +407,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     binding.status.text = "✓ [$engine] $text"
                 } else {
                     Toast.makeText(this@MainActivity, "چیزی تشخیص داده نشد", Toast.LENGTH_SHORT).show()
-                    binding.status.text = "آماده — همدل مرحله ۱ (کلمات ساده)"
+                    binding.status.text = "آماده — همدل — واژگان ~۵۰هزار"
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — همدل مرحله ۱ (کلمات ساده)"
+                        binding.status.text = "آماده — همدل — واژگان ~۵۰هزار"
                     }
                 }, 2500)
             }

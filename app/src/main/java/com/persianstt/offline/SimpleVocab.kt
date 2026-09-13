@@ -1,126 +1,114 @@
 package com.persianstt.offline
 
+import android.content.Context
+import android.util.Log
+import java.io.File
+
 /**
- * مرحله ۱ موتور همدل: کلمات و عبارت‌های سادهٔ پرتکرار.
- * بعداً همین لیست را روزبه‌روز بزرگ می‌کنیم.
- *
- * هر خط:  غلط1|غلط2|... = درست
- * یا فقط: درست
+ * واژگان گسترده (~۵۰هزار کلمه + واریانت‌های رایج ASR).
+ * فایل: assets/hamdel_vocab_map.txt
  */
 object SimpleVocab {
 
-    /** هستهٔ مرحله ۱ — عمداً کوچک و دقیق */
-    val RULES: List<Pair<List<String>, String>> = listOf(
-        // ----- سلام و احوال -----
-        listOf("سلام", "سلا", "سل", "س لام", "سلا م", "salam") to "سلام",
-        listOf("درود", "درودد", "در و د") to "درود",
-        listOf("عرض سلام", "عرضه سل", "عرضه سلام", "عرز سلام", "عرض سل", "ارز سلام", "عرضسلا") to "عرض سلام",
+    private const val TAG = "SimpleVocab"
+    private const val ASSET = "hamdel_vocab_map.txt"
+    private const val FILE = "hamdel_vocab_map.txt"
+
+    @Volatile private var mapInternal: Map<String, String> = emptyMap()
+    @Volatile private var phrasesInternal: List<String> = emptyList()
+    @Volatile private var loaded = false
+
+    /** hand-tuned high priority (always on, even before file load) */
+    private val coreRules: List<Pair<List<String>, String>> = listOf(
+        listOf("سلام", "سلا", "سل", "س لام", "سلا م") to "سلام",
+        listOf("عرضه سل", "عرضه سلام", "عرض سل", "عرز سلام", "عرض سلا", "عرضسلا") to "عرض سلام",
         listOf(
             "عرض سلام و ادب و احترام",
-            "عرضه سل",
             "عرز سلام عدابه احترام",
-            "عرض سلام عدابه احترام",
-            "ارزی سلا م اتاب اختر",
             "عرضسلامادباحتر",
-            "عرض سلام ادب احترام"
+            "ارزی سلا م اتاب اختر"
         ) to "عرض سلام و ادب و احترام",
-        listOf("ادب و احترام", "عدابه احترام", "عداب احترام", "اتاب اختر", "ادب احترام") to "ادب و احترام",
-        listOf("صبح بخیر", "صبحبخیر", "صبح بخ یر") to "صبح بخیر",
-        listOf("شب بخیر", "شببخیر") to "شب بخیر",
-        listOf("خداحافظ", "خدا حافظ", "خدافظ") to "خداحافظ",
-        listOf("خسته نباشید", "خسته نباشی", "خستنباشید") to "خسته نباشید",
-        listOf("ممنون", "ممنونم", "ممون", "مرسی", "متشکر", "متشکرم", "تشکر") to "ممنون",
-        listOf("لطفا", "لطفاً", "لتفا") to "لطفا",
-        listOf("ببخشید", "ببخشید", "معذرت") to "ببخشید",
-        listOf("خواهش می‌کنم", "خواهش میکنم", "خواهش می کنم") to "خواهش می‌کنم",
-        listOf("بله", "آره", "اره") to "بله",
-        listOf("نه", "نخیر") to "نه",
-        listOf("باشه", "باشهه", "چشم") to "باشه",
-
-        // ----- دوستان / خطاب -----
-        listOf("دوستان", "د شتانه", "دشتانه", "دوستانن") to "دوستان",
-        listOf("عزیز", "عزی", "عزیزم") to "عزیز",
-        listOf("دوستان عزیز", "د شتانه عزی", "دشتانه عزیز") to "دوستان عزیز",
-        listOf("خدمت", "خدمته", "خدمتت") to "خدمت",
-        listOf("خدمت تمام دوستان عزیز", "خدمته تمام د شتانه عزی") to "خدمت تمام دوستان عزیز",
-
-        // ----- کلمات روزمره ساده -----
-        listOf("من", "منن") to "من",
-        listOf("تو", "توو") to "تو",
-        listOf("او", "اون") to "او",
-        listOf("ما", "ماا") to "ما",
-        listOf("شما") to "شما",
-        listOf("این", "اینن") to "این",
-        listOf("آن", "اون") to "آن",
-        listOf("هست", "هستت", "است") to "هست",
-        listOf("نیست", "نیس") to "نیست",
-        listOf("بود", "بودد") to "بود",
-        listOf("شد", "شدد") to "شد",
-        listOf("کن", "بکن") to "کن",
-        listOf("بگو", "بگود") to "بگو",
-        listOf("برو", "برود") to "برو",
-        listOf("بیا", "بیاد") to "بیا",
-        listOf("بله") to "بله",
-        listOf("خوب", "خوبه", "خوبب") to "خوب",
-        listOf("بد", "بده") to "بد",
+        listOf("عدابه احترام", "اتاب اختر", "عداب احترام") to "ادب و احترام",
+        listOf("د شتانه عزی", "دشتانه عزیز") to "دوستان عزیز",
+        listOf("خدمته تمام د شتانه عزی") to "خدمت تمام دوستان عزیز",
+        listOf("ممنون", "ممنونم", "مرسی", "متشکرم") to "ممنون",
+        listOf("خسته نباشید", "خسته نباشی") to "خسته نباشید",
+        listOf("صبح بخیر") to "صبح بخیر",
+        listOf("شب بخیر") to "شب بخیر",
+        listOf("خداحافظ", "خدا حافظ") to "خداحافظ",
         listOf("بله", "آره") to "بله",
-        listOf("امروز", "امروز") to "امروز",
-        listOf("فردا", "فرداا") to "فردا",
-        listOf("دیروز", "دیروزز") to "دیروز",
-        listOf("الان", "الآن", "الانن") to "الان",
-        listOf("بعد", "بعدد") to "بعد",
-        listOf("قبل", "قبلل") to "قبل",
-        listOf("خانه", "خونه", "خانه‌") to "خانه",
-        listOf("کار", "کارر") to "کار",
-        listOf("وقت", "ساعت") to "وقت",
-        listOf("روز", "روزز") to "روز",
-        listOf("شب", "شبب") to "شب",
-        listOf("صبح", "صبحح") to "صبح",
-        listOf("آب", "آبب") to "آب",
-        listOf("نان", "نون") to "نان",
-        listOf("غذا", "غدا") to "غذا",
-        listOf("چای", "چایی") to "چای",
-        listOf("قهوه") to "قهوه",
-        listOf("کتاب") to "کتاب",
-        listOf("پول", "پولو") to "پول",
-        listOf("ماشین", "اتومبیل") to "ماشین",
-        listOf("تلفن", "گوشی") to "تلفن",
-        listOf("پیام") to "پیام",
-        listOf("کمک", "کمکم") to "کمک",
-        listOf("اسم", "نام") to "اسم",
-        listOf("دوست", "رفیق") to "دوست",
-        listOf("پدر") to "پدر",
-        listOf("مادر") to "مادر",
-        listOf("برادر") to "برادر",
-        listOf("خواهر") to "خواهر",
-        listOf("یک", "۱", "1") to "یک",
-        listOf("دو", "۲", "2") to "دو",
-        listOf("سه", "۳", "3") to "سه",
-        listOf("چهار", "۴", "4") to "چهار",
-        listOf("پنج", "۵", "5") to "پنج",
-        listOf("شش", "۶", "6") to "شش",
-        listOf("هفت", "۷", "7") to "هفت",
-        listOf("هشت", "۸", "8") to "هشت",
-        listOf("نه", "۹", "9") to "نه",
-        listOf("ده", "۱۰", "10") to "ده"
+        listOf("نه", "نخیر") to "نه",
+        listOf("باشه", "چشم") to "باشه",
+        listOf("لطفا", "لطفاً") to "لطفا",
+        listOf("ببخشید") to "ببخشید"
     )
 
-    /** نقشهٔ سریع: هر غلط → درست */
-    val map: Map<String, String> by lazy {
+    val map: Map<String, String>
+        get() = mapInternal.ifEmpty { coreMap() }
+
+    val correctPhrases: List<String>
+        get() = phrasesInternal.ifEmpty { coreRules.map { it.second }.distinct().sortedByDescending { it.length } }
+
+    private fun coreMap(): Map<String, String> {
         val m = LinkedHashMap<String, String>()
-        for ((wrongs, correct) in RULES) {
+        for ((wrongs, correct) in coreRules) {
             m[correct] = correct
+            m[correct.replace(" ", "")] = correct
             for (w in wrongs) {
                 m[w] = correct
                 m[w.replace(" ", "")] = correct
             }
         }
-        m
+        return m
     }
 
-    /** عبارت‌های درست مرحله ۱ (برای تکمیل پیشوند) */
-    val correctPhrases: List<String> by lazy {
-        RULES.map { it.second }.distinct().sortedByDescending { it.length }
+    fun ensureLoaded(context: Context) {
+        if (loaded && mapInternal.isNotEmpty()) return
+        synchronized(this) {
+            if (loaded && mapInternal.isNotEmpty()) return
+            val m = LinkedHashMap<String, String>(80_000)
+            // core first
+            m.putAll(coreMap())
+            try {
+                val f = File(context.applicationContext.filesDir, FILE)
+                if (!f.exists() || f.length() < 100_000) {
+                    context.applicationContext.assets.open(ASSET).use { inp ->
+                        f.outputStream().use { out -> inp.copyTo(out) }
+                    }
+                }
+                val phraseSet = LinkedHashSet<String>()
+                f.bufferedReader().useLines { lines ->
+                    lines.forEach { line0 ->
+                        val line = line0.trim()
+                        if (line.isEmpty() || line.startsWith("#")) return@forEach
+                        if (line.contains("=")) {
+                            val parts = line.split("=", limit = 2)
+                            val wrong = parts[0].trim()
+                            val correct = parts[1].trim()
+                            if (wrong.isNotEmpty() && correct.isNotEmpty()) {
+                                m.putIfAbsent(wrong, correct)
+                                m.putIfAbsent(wrong.replace(" ", ""), correct)
+                                m.putIfAbsent(correct, correct)
+                                phraseSet.add(correct)
+                            }
+                        } else {
+                            m.putIfAbsent(line, line)
+                            m.putIfAbsent(line.replace(" ", ""), line)
+                            phraseSet.add(line)
+                        }
+                    }
+                }
+                phrasesInternal = phraseSet.sortedByDescending { it.length }
+                mapInternal = m
+                Log.i(TAG, "vocab loaded entries=${m.size} phrases=${phrasesInternal.size}")
+            } catch (e: Exception) {
+                Log.e(TAG, "vocab load fail", e)
+                mapInternal = coreMap()
+                phrasesInternal = coreRules.map { it.second }.distinct().sortedByDescending { it.length }
+            } finally {
+                loaded = true
+            }
+        }
     }
 
     fun normalizeKey(s: String): String =

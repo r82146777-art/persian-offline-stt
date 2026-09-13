@@ -12,10 +12,10 @@ object PersianCorrector {
     private const val TAG = "PersianCorrector"
 
     fun ensureLoaded(context: Context) {
-        // brain optional for stage-1; still load for join-broken
-        try {
-            BrainLexicon.ensureLoaded(context)
-        } catch (e: Exception) {
+        try { SimpleVocab.ensureLoaded(context) } catch (e: Exception) {
+            Log.w(TAG, "vocab fail", e)
+        }
+        try { BrainLexicon.ensureLoaded(context) } catch (e: Exception) {
             Log.w(TAG, "brain optional fail", e)
         }
     }
