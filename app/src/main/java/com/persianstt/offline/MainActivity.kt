@@ -12,6 +12,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Bundle
+import android.view.inputmethod.InputMethodManager
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.CheckBox
@@ -82,6 +83,14 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
 
         binding.dictationButton.setOnClickListener { showDictationHelp() }
+        binding.root.findViewById<android.view.View>(R.id.btn_enable_ime)?.setOnClickListener {
+            setupKeyboardFlow()
+        }
+        // if only one obvious path - long press status for keyboard setup
+        binding.status.setOnLongClickListener {
+            setupKeyboardFlow()
+            true
+        }
 
         // Opened from RecognitionService when mic permission missing
         if (intent?.getBooleanExtra("request_mic", false) == true) {
@@ -241,7 +250,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — همدل — واژگان ~۵۰هزار"
+                        binding.status.text = "آماده — تایپ صوتی آفلاین"
                         binding.micButton.isEnabled = true
                     } else {
                         binding.status.text = "خطا: ${HamdelEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
@@ -276,6 +285,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     try { HamdelEngine.release() } catch (_: Throwable) {}
                     try { Qwen3Engine.release() } catch (_: Throwable) {}
                     try { HamdelEngine.release() } catch (_: Throwable) {}
+                    System.gc()
                     HamdelEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
@@ -295,7 +305,12 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = true
                 val ok = withContext(Dispatchers.IO) {
                     try {
-                        HamdelEngine.load(this@MainActivity)
+                        System.gc()
+                        try {
+                            HamdelEngine.load(this@MainActivity)
+                        } catch (_: Throwable) {
+                            HamdelEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
+                        }
                     } catch (_: OutOfMemoryError) {
                         HamdelEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
                         false
@@ -307,7 +322,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — همدل — واژگان ~۵۰هزار"
+                    binding.status.text = "آماده — تایپ صوتی آفلاین"
                     binding.micButton.isEnabled = true
                 } else if (HamdelEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
@@ -442,7 +457,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — تایپ صوتی آفلاین / دیکته"
+                        binding.status.text = "آماده — تایپ صوتی آفلاین"
                     }
                 }, 3000)
             }
@@ -525,6 +540,53 @@ override fun onCreate(savedInstanceState: Bundle?) {
         ).show()
     }
 
+
+    /** Enable IME + pick it + try show keyboard on edit fields. */
+    private fun setupKeyboardFlow() {
+        try {
+            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+        } catch (_: Exception) {
+            openVoiceInputSettings()
+        }
+        Toast.makeText(
+            this,
+            "۱) کیبورد این برنامه را روشن کنید\n۲) در پنجره بعد آن را انتخاب کنید",
+            Toast.LENGTH_LONG
+        ).show()
+        binding.root.postDelayed({
+            try {
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showInputMethodPicker()
+            } catch (_: Exception) {}
+        }, 1500)
+    }
+
+    private fun tryShowKeyboard() {
+        val et = binding.resultText
+        et.requestFocus()
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(et, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            // after returning from IME settings, offer picker once
+            binding.root.postDelayed({
+                if (isFinishing || isDestroyed) return@postDelayed
+                try {
+                    val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                    val enabled = imm.enabledInputMethodList.any {
+                        it.packageName == packageName
+                    }
+                    if (enabled) {
+                        // soft show on our field
+                        tryShowKeyboard()
+                    }
+                } catch (_: Exception) {}
+            }, 400)
+        }
+    }
 
     private fun ensureMicPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)

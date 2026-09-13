@@ -18,26 +18,37 @@ object HamdelEngine {
 
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
         try {
+            // ONLY download/extract model — no heavy vocab on this path (prevents OOM)
             ShenavaEngine.ensureModel(context, onProgress)
-            try { PersianCorrector.ensureLoaded(context) } catch (_: Exception) {}
             lastError = ShenavaEngine.lastError
+            // vocab later in background
+            try { PersianCorrector.ensureLoaded(context.applicationContext) } catch (_: Throwable) {}
         } catch (e: Exception) {
             lastError = e.message ?: ShenavaEngine.lastError
             throw e
+        } catch (oom: OutOfMemoryError) {
+            lastError = "حافظه کم هنگام آماده‌سازی"
+            System.gc()
+            throw oom
         }
     }
 
     fun load(context: Context): Boolean {
         appCtx = context.applicationContext
-        try { PersianCorrector.ensureLoaded(context) } catch (_: Exception) {}
-        val ok = try {
-            ShenavaEngine.load(context)
+        try { PersianCorrector.ensureLoaded(context.applicationContext) } catch (_: Throwable) {}
+        return try {
+            System.gc()
+            val ok = ShenavaEngine.load(context)
+            lastError = ShenavaEngine.lastError
+            ok
+        } catch (oom: OutOfMemoryError) {
+            lastError = "حافظه کم — برنامه‌های دیگر را ببندید"
+            System.gc()
+            false
         } catch (e: Exception) {
             lastError = e.message ?: "بارگذاری ناموفق"
             false
         }
-        lastError = ShenavaEngine.lastError
-        return ok
     }
 
     fun release() {

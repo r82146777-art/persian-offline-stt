@@ -2,11 +2,14 @@ package com.persianstt.offline
 
 import android.content.Context
 import android.util.Log
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 /**
- * واژگان گسترده (~۵۰هزار کلمه + واریانت‌های رایج ASR).
- * فایل: assets/hamdel_vocab_map.txt
+ * Core rules always available. Full ~50k map loads in background (never on UI / prepare).
  */
 object SimpleVocab {
 
@@ -16,9 +19,9 @@ object SimpleVocab {
 
     @Volatile private var mapInternal: Map<String, String> = emptyMap()
     @Volatile private var phrasesInternal: List<String> = emptyList()
-    @Volatile private var loaded = false
+    private val loading = AtomicBoolean(false)
+    private val fullLoaded = AtomicBoolean(false)
 
-    /** hand-tuned high priority (always on, even before file load) */
     private val coreRules: List<Pair<List<String>, String>> = listOf(
         listOf("سلام", "سلا", "سل", "س لام", "سلا م") to "سلام",
         listOf("عرضه سل", "عرضه سلام", "عرض سل", "عرز سلام", "عرض سلا", "عرضسلا") to "عرض سلام",
@@ -44,10 +47,12 @@ object SimpleVocab {
     )
 
     val map: Map<String, String>
-        get() = mapInternal.ifEmpty { coreMap() }
+        get() = if (mapInternal.isNotEmpty()) mapInternal else coreMap()
 
     val correctPhrases: List<String>
-        get() = phrasesInternal.ifEmpty { coreRules.map { it.second }.distinct().sortedByDescending { it.length } }
+        get() = phrasesInternal.ifEmpty {
+            coreRules.map { it.second }.distinct().sortedByDescending { it.length }
+        }
 
     private fun coreMap(): Map<String, String> {
         val m = LinkedHashMap<String, String>()
@@ -62,53 +67,74 @@ object SimpleVocab {
         return m
     }
 
+    /** Non-blocking: core ready now; full file in background. */
     fun ensureLoaded(context: Context) {
-        if (loaded && mapInternal.isNotEmpty()) return
-        synchronized(this) {
-            if (loaded && mapInternal.isNotEmpty()) return
-            val m = LinkedHashMap<String, String>(80_000)
-            // core first
-            m.putAll(coreMap())
+        if (mapInternal.isEmpty()) {
+            mapInternal = coreMap()
+            phrasesInternal = coreRules.map { it.second }.distinct().sortedByDescending { it.length }
+        }
+        if (fullLoaded.get() || !loading.compareAndSet(false, true)) return
+        val app = context.applicationContext
+        thread(name = "vocab-load", isDaemon = true) {
             try {
-                val f = File(context.applicationContext.filesDir, FILE)
-                if (!f.exists() || f.length() < 100_000) {
-                    context.applicationContext.assets.open(ASSET).use { inp ->
-                        f.outputStream().use { out -> inp.copyTo(out) }
-                    }
-                }
-                val phraseSet = LinkedHashSet<String>()
-                f.bufferedReader().useLines { lines ->
-                    lines.forEach { line0 ->
-                        val line = line0.trim()
-                        if (line.isEmpty() || line.startsWith("#")) return@forEach
-                        if (line.contains("=")) {
-                            val parts = line.split("=", limit = 2)
-                            val wrong = parts[0].trim()
-                            val correct = parts[1].trim()
-                            if (wrong.isNotEmpty() && correct.isNotEmpty()) {
-                                m.putIfAbsent(wrong, correct)
-                                m.putIfAbsent(wrong.replace(" ", ""), correct)
-                                m.putIfAbsent(correct, correct)
-                                phraseSet.add(correct)
-                            }
-                        } else {
-                            m.putIfAbsent(line, line)
-                            m.putIfAbsent(line.replace(" ", ""), line)
-                            phraseSet.add(line)
-                        }
-                    }
-                }
-                phrasesInternal = phraseSet.sortedByDescending { it.length }
-                mapInternal = m
-                Log.i(TAG, "vocab loaded entries=${m.size} phrases=${phrasesInternal.size}")
-            } catch (e: Exception) {
-                Log.e(TAG, "vocab load fail", e)
-                mapInternal = coreMap()
-                phrasesInternal = coreRules.map { it.second }.distinct().sortedByDescending { it.length }
+                loadFull(app)
+                fullLoaded.set(true)
+            } catch (e: Throwable) {
+                Log.e(TAG, "full vocab skip", e)
             } finally {
-                loaded = true
+                loading.set(false)
             }
         }
+    }
+
+    private fun loadFull(context: Context) {
+        val f = File(context.filesDir, FILE)
+        if (!f.exists() || f.length() < 100_000) {
+            try {
+                context.assets.open(ASSET).use { inp ->
+                    f.outputStream().use { out -> inp.copyTo(out) }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "asset copy fail", e)
+                return
+            }
+        }
+        val m = LinkedHashMap<String, String>(64_000)
+        m.putAll(coreMap())
+        val phraseSet = LinkedHashSet<String>()
+        // Stream line-by-line — avoid loading whole file as one string
+        BufferedReader(InputStreamReader(f.inputStream(), Charsets.UTF_8), 32 * 1024).use { br ->
+            var line: String?
+            var n = 0
+            while (br.readLine().also { line = it } != null) {
+                val s = line!!.trim()
+                if (s.isEmpty() || s.startsWith("#")) continue
+                if (s.contains("=")) {
+                    val parts = s.split("=", limit = 2)
+                    val wrong = parts[0].trim()
+                    val correct = parts.getOrNull(1)?.trim().orEmpty()
+                    if (wrong.isNotEmpty() && correct.isNotEmpty()) {
+                        m.putIfAbsent(wrong, correct)
+                        m.putIfAbsent(wrong.replace(" ", ""), correct)
+                        m.putIfAbsent(correct, correct)
+                        phraseSet.add(correct)
+                    }
+                } else {
+                    m.putIfAbsent(s, s)
+                    m.putIfAbsent(s.replace(" ", ""), s)
+                    phraseSet.add(s)
+                }
+                n++
+                // yield occasionally to reduce jank
+                if (n % 5000 == 0) {
+                    try { Thread.sleep(1) } catch (_: Exception) {}
+                }
+            }
+        }
+        mapInternal = m
+        phrasesInternal = phraseSet.sortedByDescending { it.length }
+        Log.i(TAG, "full vocab ready size=${m.size}")
+        System.gc()
     }
 
     fun normalizeKey(s: String): String =

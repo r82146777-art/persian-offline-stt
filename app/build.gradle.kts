@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "com.persianstt.offline"
-        minSdk = 26
+        minSdk = 21
         targetSdk = 35
-        versionCode = 59
-        versionName = "3.13.3"
+        versionCode = 60
+        versionName = "3.14.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
