@@ -229,7 +229,7 @@ object VoskEngine {
             return
         }
         // Vosk grammar: JSON array of phrases
-        val arr = cleaned.joinToString(prefix = "[", postfix = "]") { ""${it.replace(""", "")}"" }
+        val arr = cleaned.joinToString(prefix = "[", postfix = "]") { "\"" + it.replace("\"", "") + "\"" }
         grammarJson = arr
     }
 
