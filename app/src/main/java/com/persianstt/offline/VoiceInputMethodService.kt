@@ -39,8 +39,9 @@ class VoiceInputMethodService : InputMethodService() {
     private var statusView: TextView? = null
     private var clipboardPanel: LinearLayout? = null
     private var keysContainer: LinearLayout? = null
-    private var currentLayer = 0
+    private var currentLayer = 0 // 0=letters 1=numbers 2=symbols
     private var isShift = false
+    private var imeLang = "fa" // fa | en
     private var isListening = false
     private var showClipboard = false
     private var listenJob: Job? = null
@@ -66,16 +67,26 @@ class VoiceInputMethodService : InputMethodService() {
         private const val SUB = 0xFFAAAAAA.toInt()
     }
 
-    private val ROW1 = listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج", "چ")
-    private val ROW2 = listOf("ش", "س", "ی", "ب", "ل", "ا", "ت", "ن", "م", "ک", "گ")
-    private val ROW3 = listOf("ظ", "ط", "ز", "ر", "ذ", "د", "پ", "و")
-    private val ROW_NUM = listOf("۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹", "۰")
+    // Persian (standard-ish order)
+    private val FA1 = listOf("ض", "ص", "ث", "ق", "ف", "غ", "ع", "ه", "خ", "ح", "ج", "چ")
+    private val FA2 = listOf("ش", "س", "ی", "ب", "ل", "ا", "ت", "ن", "م", "ک", "گ")
+    private val FA3 = listOf("ظ", "ط", "ز", "ر", "ذ", "د", "پ", "و")
+    // English QWERTY
+    private val EN1 = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
+    private val EN2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
+    private val EN3 = listOf("z", "x", "c", "v", "b", "n", "m")
+    // Phone-pad numbers (3x4) + side symbols
+    private val NUM_PAD = listOf(
+        listOf("+", "۱", "۲", "۳", "-"),
+        listOf("*", "۴", "۵", "۶", "/"),
+        listOf("#", "۷", "۸", "۹", "%"),
+        listOf(",", "٫", "۰", ".", "=")
+    )
     private val SYM1 = listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")")
     private val SYM2 = listOf("-", "_", "=", "+", "[", "]", "{", "}", ";", ":")
-    private val SYM3 = listOf("\"", "'", ",", ".", "/", "\\", "؟", "،", "؛", "«")
+    private val SYM3 = listOf("\"", "'", "،", ".", "/", "\\", "؟", "؛", "«", "»")
 
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { saveCurrentClipboard() }
-    private val longPress = Runnable { if (!isListening) startVoice() else stopVoice() }
 
     override fun onCreate() {
         super.onCreate()
@@ -95,7 +106,7 @@ class VoiceInputMethodService : InputMethodService() {
             setPadding(4, 6, 4, 6)
         }
         statusView = TextView(this).apply {
-            text = "آفلاین تایپ — Vosk · فشار طولانی فاصله = صوت"
+            text = "آفلاین تایپ — Vosk · فشار طولانی فاصله = زبان"
             setTextColor(SUB); textSize = 11f; setPadding(12, 2, 12, 4); gravity = Gravity.CENTER
         }
         root.addView(statusView, lpMW())
@@ -117,7 +128,7 @@ class VoiceInputMethodService : InputMethodService() {
         root.addView(clipboardPanel, lpMW())
         keysContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
         root.addView(keysContainer, lpMW())
         rebuildKeys()
@@ -159,7 +170,7 @@ class VoiceInputMethodService : InputMethodService() {
         showClipboard = !showClipboard
         clipboardPanel?.visibility = if (showClipboard) View.VISIBLE else View.GONE
         if (showClipboard) { saveCurrentClipboard(); renderClipboard(); statusView?.text = "کلیپ‌بورد — ضربه = جایگذاری" }
-        else statusView?.text = "آفلاین تایپ — Vosk · فشار طولانی فاصله = صوت"
+        else statusView?.text = "آفلاین تایپ — Vosk · فشار طولانی فاصله = زبان"
     }
 
     private fun renderClipboard() {
@@ -200,58 +211,127 @@ class VoiceInputMethodService : InputMethodService() {
     private fun rebuildKeys() {
         val c = keysContainer ?: return; c.removeAllViews()
         when (currentLayer) {
-            0 -> { addRow(c, ROW1); addRow(c, ROW2); addRow(c, ROW3, true) }
-            1 -> { addRow(c, ROW_NUM); addRow(c, listOf(".", ",", "؟", "!", ":", ";", "ـ", "٪", "×", "÷")); addRow(c, listOf("(", ")", "[", "]", "{", "}", "<", ">")) }
-            else -> { addRow(c, SYM1); addRow(c, SYM2); addRow(c, SYM3) }
+            0 -> {
+                if (imeLang == "en") {
+                    addRow(c, if (isShift) EN1.map { it.uppercase() } else EN1)
+                    addRow(c, if (isShift) EN2.map { it.uppercase() } else EN2)
+                    addRow(c, if (isShift) EN3.map { it.uppercase() } else EN3, withShiftBksp = true)
+                } else {
+                    addRow(c, FA1)
+                    addRow(c, FA2)
+                    addRow(c, FA3, withShiftBksp = true)
+                }
+            }
+            1 -> {
+                // phone-pad style numbers
+                NUM_PAD.forEach { addRow(c, it) }
+            }
+            else -> {
+                addRow(c, SYM1)
+                addRow(c, SYM2)
+                addRow(c, SYM3)
+            }
         }
         addBottom(c)
     }
 
-    private fun addRow(parent: LinearLayout, keys: List<String>, shift: Boolean = false) {
+    /** LTR rows so ⌫ and ↵ sit on the RIGHT like normal keyboards */
+    private fun addRow(parent: LinearLayout, keys: List<String>, withShiftBksp: Boolean = false) {
         val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
             layoutParams = lpMW().apply { setMargins(2, 2, 2, 2) }
         }
-        if (shift) row.addView(makeKey("⇧", 1.2f, true) { isShift = !isShift; rebuildKeys() })
-        keys.forEach { l -> row.addView(makeKey(l, 1f) { commitText(l) }) }
-        if (shift) row.addView(makeKey("⌫", 1.2f, true) { deleteLast() })
+        if (withShiftBksp) {
+            row.addView(makeKey("⇧", 1.2f, true) {
+                isShift = !isShift
+                rebuildKeys()
+            })
+        }
+        keys.forEach { l ->
+            row.addView(makeKey(l, 1f) {
+                val out = if (isShift && l.length == 1 && l[0] in 'a'..'z') l.uppercase() else l
+                commitText(out)
+                if (isShift && imeLang == "en") {
+                    isShift = false
+                    rebuildKeys()
+                }
+            })
+        }
+        if (withShiftBksp) {
+            row.addView(makeKey("⌫", 1.2f, true) { deleteLast() })
+        }
         parent.addView(row)
     }
 
     private fun addBottom(parent: LinearLayout) {
         val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; layoutDirection = View.LAYOUT_DIRECTION_RTL
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
             layoutParams = lpMW().apply { setMargins(2, 4, 2, 2) }
         }
-        val lab = when (currentLayer) { 0 -> "۱۲۳"; 1 -> "#+="; else -> "فا" }
-        row.addView(makeKey(lab, 1.3f, true) { currentLayer = (currentLayer + 1) % 3; rebuildKeys() })
-        row.addView(makeKey("،", 0.8f) { commitText("،") })
-        row.addView(makeKey(".", 0.8f) { commitText(".") })
-        val space = makeKey("فاصله", 3.8f) { }
-        val spaceState = booleanArrayOf(false)
-        val spaceLong = Runnable { spaceState[0] = true; longPress.run() }
+        // Symbols
+        row.addView(makeKey("#+=", 1.15f, true) {
+            currentLayer = if (currentLayer == 2) 0 else 2
+            rebuildKeys()
+        })
+        // Numbers
+        row.addView(makeKey("۱۲۳", 1.15f, true) {
+            currentLayer = if (currentLayer == 1) 0 else 1
+            rebuildKeys()
+        })
+        // Space — long press = language
+        val spaceLabel = if (imeLang == "en") "space" else "فاصله"
+        val space = makeKey(spaceLabel, 3.5f) { }
+        val longFired = booleanArrayOf(false)
+        val longRun = Runnable {
+            longFired[0] = true
+            showLanguagePicker()
+        }
         space.setOnTouchListener { v, e ->
             when (e.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    spaceState[0] = false; v.isPressed = true
-                    mainHandler.postDelayed(spaceLong, LONG_PRESS_MS); true
+                    longFired[0] = false
+                    v.isPressed = true
+                    mainHandler.postDelayed(longRun, LONG_PRESS_MS)
+                    true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    mainHandler.removeCallbacks(spaceLong); v.isPressed = false
-                    if (!spaceState[0] && e.action == MotionEvent.ACTION_UP) {
-                        commitText(" "); playClick()
+                    mainHandler.removeCallbacks(longRun)
+                    v.isPressed = false
+                    if (!longFired[0] && e.action == MotionEvent.ACTION_UP) {
+                        commitText(" ")
+                        playClick()
                     }
                     true
                 }
                 else -> false
             }
         }
-        space.setOnClickListener(null); row.addView(space)
+        space.setOnClickListener(null)
+        row.addView(space)
+        // Enter on the RIGHT
         row.addView(makeKey("↵", 1.3f, true) {
             currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
         })
         parent.addView(row)
+    }
+
+    private fun showLanguagePicker() {
+        // Inline switch — avoids system dialog / token issues inside IME
+        imeLang = if (imeLang == "fa") "en" else "fa"
+        currentLayer = 0
+        isShift = false
+        rebuildKeys()
+        statusView?.text = if (imeLang == "en") "English — long-press space to switch" else "فارسی — فشار طولانی فاصله = زبان"
+        try {
+            android.widget.Toast.makeText(
+                this,
+                if (imeLang == "en") "English" else "فارسی",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        } catch (_: Exception) {}
     }
 
     private fun makeKey(label: String, w: Float, special: Boolean = false, onTap: () -> Unit) = Button(this).apply {
@@ -260,7 +340,7 @@ class VoiceInputMethodService : InputMethodService() {
         layoutParams = LinearLayout.LayoutParams(0, 100, w).apply { setMargins(3, 3, 3, 3) }
         setOnClickListener { onTap(); playClick() }
         contentDescription = when (label) {
-            "فاصله" -> "فاصله — فشار طولانی برای تایپ صوتی"
+            "فاصله", "space" -> "فاصله — فشار طولانی برای انتخاب زبان"
             "⌫" -> "پاک کردن"; "↵" -> "ورود"; "⇧" -> "شیفت"; else -> label
         }
     }
@@ -408,7 +488,7 @@ class VoiceInputMethodService : InputMethodService() {
                     statusView?.text = "✓ [$engine ${"%.1f".format(secs)}s] $text"
                 } else statusView?.text = "چیزی تشخیص داده نشد (${"%.1f".format(secs)}s صدا=$engine)"
                 mainHandler.postDelayed({
-                    statusView?.text = "آفلاین تایپ — Vosk · فشار طولانی فاصله = صوت"
+                    statusView?.text = "آفلاین تایپ — Vosk · فشار طولانی فاصله = زبان"
                 }, 2500)
             }
         }

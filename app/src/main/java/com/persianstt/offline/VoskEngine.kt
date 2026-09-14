@@ -194,7 +194,8 @@ object VoskEngine {
             System.gc()
             Thread.sleep(150)
             model = Model(modelDir(context).absolutePath)
-            try { loadDefaultVocabulary() } catch (_: Exception) {}
+            // Full vocabulary: do NOT restrict grammar — recognize all Persian words
+            grammarJson = null
             lastError = ""
             lastPhase = "loaded"
             true
@@ -255,7 +256,7 @@ object VoskEngine {
         // ensure 16k path
         val sr = if (sampleRate == 16000) 16000 else 16000
         return try {
-            val g = grammarJson
+            val g: String? = null // full lexicon; restricted grammar disabled
             val rec = if (!g.isNullOrBlank()) {
                 try {
                     Recognizer(m, sr.toFloat(), g)

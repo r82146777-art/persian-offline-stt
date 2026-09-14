@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <input-method xmlns:android="http://schemas.android.com/apk/res/android"
     android:settingsActivity="com.persianstt.offline.MainActivity"
-    android:supportsSwitchingToNextInputMethod="true"
+    android:supportsSwitchingToNextInputMethod="false"
     android:isDefault="false">
-    <!-- Single subtype only — prevents the English / Keyboard picker dialog -->
     <subtype
         android:label="@string/ime_name"
         android:imeSubtypeMode="keyboard"
         android:imeSubtypeLocale="fa_IR"
         android:languageTag="fa-IR"
-        android:isAsciiCapable="true" />
+        android:isAsciiCapable="false" />
 </input-method>

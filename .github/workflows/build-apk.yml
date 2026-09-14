@@ -56,8 +56,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.16.0
-          name: "v3.16.0 - DeepSeek smart edit/emoji + Vosk offline STT"
+          tag_name: v3.17.0
+          name: "v3.17.0 - full Vosk vocab, fixed keyboard layout, FA/EN space long-press"
           body: |
             ## نسخه ۳.۱۶.۰
             * موتور تشخیص: Vosk آفلاین
