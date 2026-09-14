@@ -24,11 +24,15 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      - name: Accept Android licenses & local.properties
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null 2>&1 || true
+          # fallback path on some images
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null 2>&1 || true
+          fi
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
       - name: Download sherpa-onnx AAR
         run: |
@@ -53,13 +57,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v3.15.0
-          name: "v3.15.0 - Vosk primary + audio/vocab/postprocess pipeline"
+          name: "v3.15.0 - Vosk + 3-stage pipeline (audio/vocab/postprocess)"
           body: |
-            ## نسخه ۳.۶.۰ — موتور جدید Qwen3-ASR
-            * موتور اصلی: **Qwen3-ASR 0.6B** (پشتیبانی رسمی فارسی + چند زبان)
-            * دانلود از GitHub (~۸۴۰ مگ)
-            * دیکته سیستم + کیبورد آفلاین
-            * حداقل ~۱ گیگ رم آزاد برای بارگذاری مدل پیشنهاد می‌شود
+            ## نسخه ۳.۱۵.۰
+            * موتور: **Vosk small-fa** (همان موتور اولیه)
+            * پیش‌پردازش صدا ۱۶kHz + noise gate
+            * واژگان سفارشی Vosk
+            * پس‌پردازش Regex فارسی
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
