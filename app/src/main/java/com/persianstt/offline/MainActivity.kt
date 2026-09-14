@@ -164,12 +164,32 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        // light post-process only
-        val fixed = NumberNormalizer.normalize(PersianPostProcess.fix(current))
-        finalText.clear()
-        finalText.append(fixed)
-        binding.resultText.setText(fixed)
-        Toast.makeText(this, if (fixed == current) "تغییری لازم نبود" else "متن اصلاح شد", Toast.LENGTH_SHORT).show()
+        binding.status.text = "در حال اصلاح هوشمند…"
+        lifecycleScope.launch {
+            val online = withContext(Dispatchers.IO) {
+                try { DeepSeekClient.correctText(current) } catch (_: Exception) { "" }
+            }
+            val fixed = when {
+                online.isNotBlank() && online != current -> online
+                else -> {
+                    // offline fallback
+                    val local = PersianCorrector.fix(this@MainActivity, current)
+                    NumberNormalizer.normalize(PersianPostProcess.fix(local))
+                }
+            }
+            if (isFinishing || isDestroyed) return@launch
+            finalText.clear()
+            finalText.append(fixed)
+            binding.resultText.setText(fixed)
+            binding.resultText.setSelection(fixed.length)
+            val msg = when {
+                online.isNotBlank() && fixed != current -> "متن با هوش مصنوعی اصلاح شد"
+                fixed != current -> "متن اصلاح شد (آفلاین)"
+                else -> "تغییری لازم نبود"
+            }
+            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+            binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
+        }
     }
 
     private fun applyEmojis() {
@@ -178,11 +198,24 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        val enriched = EmojiHelper.enrich(current)
-        finalText.clear()
-        finalText.append(enriched)
-        binding.resultText.setText(enriched)
-        Toast.makeText(this, "ایموجی در متن قرار گرفت", Toast.LENGTH_SHORT).show()
+        binding.status.text = "افزودن ایموجی هوشمند…"
+        lifecycleScope.launch {
+            val online = withContext(Dispatchers.IO) {
+                try { DeepSeekClient.addEmojis(current) } catch (_: Exception) { "" }
+            }
+            val enriched = if (online.isNotBlank()) online else EmojiHelper.enrich(current)
+            if (isFinishing || isDestroyed) return@launch
+            finalText.clear()
+            finalText.append(enriched)
+            binding.resultText.setText(enriched)
+            binding.resultText.setSelection(enriched.length)
+            Toast.makeText(
+                this@MainActivity,
+                if (online.isNotBlank()) "ایموجی هوشمند اضافه شد" else "ایموجی محلی اضافه شد",
+                Toast.LENGTH_SHORT
+            ).show()
+            binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
+        }
     }
 
     private fun showSoundSettings() {

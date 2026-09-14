@@ -293,35 +293,63 @@ class VoiceInputMethodService : InputMethodService() {
 
     private fun insertSmartEmoji() {
         val base = lastCommitted.ifBlank {
-            // try surrounding text
             try {
-                currentInputConnection?.getTextBeforeCursor(80, 0)?.toString() ?: ""
+                currentInputConnection?.getTextBeforeCursor(120, 0)?.toString() ?: ""
             } catch (_: Exception) { "" }
         }
         if (base.isBlank()) {
             commitText("😊")
             return
         }
-        val enriched = EmojiHelper.enrich(base.trim())
-        // only append new emojis part
-        val extra = enriched.removePrefix(base.trim()).trim()
-        if (extra.isNotBlank()) commitText(" $extra")
-        else commitText(" ✨")
+        statusView?.text = "ایموجی هوشمند…"
+        scope.launch(Dispatchers.IO) {
+            val online = try { DeepSeekClient.addEmojis(base.trim()) } catch (_: Exception) { "" }
+            val enriched = if (online.isNotBlank()) online else EmojiHelper.enrich(base.trim())
+            withContext(Dispatchers.Main) {
+                val ic = currentInputConnection ?: return@withContext
+                // replace last portion if matches base
+                try {
+                    val before = ic.getTextBeforeCursor(base.length + 5, 0)?.toString() ?: ""
+                    if (before.endsWith(base.trim())) {
+                        ic.deleteSurroundingText(base.trim().length, 0)
+                        ic.commitText(enriched, 1)
+                    } else {
+                        ic.commitText(" " + enriched.removePrefix(base.trim()).trim(), 1)
+                    }
+                } catch (_: Exception) {
+                    commitText(" ✨")
+                }
+                lastCommitted = enriched
+                statusView?.text = if (online.isNotBlank()) "ایموجی AI" else "ایموجی محلی"
+            }
+        }
     }
 
     private fun editLastCommitted() {
         val ic = currentInputConnection ?: return
         val before = try { ic.getTextBeforeCursor(400, 0)?.toString() ?: "" } catch (_: Exception) { "" }
         if (before.isBlank()) return
-        val fixed = NumberNormalizer.normalize(PersianPostProcess.fix(before))
-        if (fixed == before) {
-            statusView?.text = "اصلاحی لازم نبود"
-            return
+        statusView?.text = "اصلاح هوشمند…"
+        scope.launch(Dispatchers.IO) {
+            val online = try { DeepSeekClient.correctText(before) } catch (_: Exception) { "" }
+            val fixed = when {
+                online.isNotBlank() -> online
+                else -> NumberNormalizer.normalize(PersianPostProcess.fix(before))
+            }
+            withContext(Dispatchers.Main) {
+                val conn = currentInputConnection ?: return@withContext
+                if (fixed == before) {
+                    statusView?.text = "اصلاحی لازم نبود"
+                    return@withContext
+                }
+                try {
+                    conn.deleteSurroundingText(before.length, 0)
+                    conn.commitText(fixed, 1)
+                } catch (_: Exception) {}
+                lastCommitted = fixed
+                statusView?.text = if (online.isNotBlank()) "اصلاح AI" else "اصلاح محلی"
+            }
         }
-        ic.deleteSurroundingText(before.length, 0)
-        ic.commitText(fixed, 1)
-        lastCommitted = fixed
-        statusView?.text = "متن اصلاح شد"
     }
 
     private fun startVoice() {

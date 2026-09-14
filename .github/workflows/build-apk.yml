@@ -56,14 +56,13 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.15.0
-          name: "v3.15.0 - Vosk + 3-stage pipeline (audio/vocab/postprocess)"
+          tag_name: v3.16.0
+          name: "v3.16.0 - DeepSeek smart edit/emoji + Vosk offline STT"
           body: |
-            ## نسخه ۳.۱۵.۰
-            * موتور: **Vosk small-fa** (همان موتور اولیه)
-            * پیش‌پردازش صدا ۱۶kHz + noise gate
-            * واژگان سفارشی Vosk
-            * پس‌پردازش Regex فارسی
+            ## نسخه ۳.۱۶.۰
+            * موتور تشخیص: Vosk آفلاین
+            * اصلاح متن و ایموجی هوشمند با API (کلید مبهم‌سازی‌شده)
+            * در نبود اینترنت، اصلاح محلی
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
