@@ -244,17 +244,17 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
     private fun prepareModel() {
-        if (HamdelEngine.isReady(this)) {
+        if (VoskEngine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
-                    try { HamdelEngine.load(this@MainActivity) } catch (_: Throwable) { false }
+                    try { VoskEngine.load(this@MainActivity) } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — تایپ صوتی آفلاین"
+                        binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا: ${HamdelEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
+                        binding.status.text = "خطا: ${VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -263,7 +263,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور")
-            .setMessage("موتور همدل مرحله ۱ (~۱۰۰ مگ) دانلود شود؟\nاول کلمات ساده را تمرین می‌کنیم.")
+            .setMessage("موتور Vosk (~۵۳ مگ) دانلود شود؟")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -283,11 +283,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 withContext(Dispatchers.IO) {
                     try { ShenavaEngine.release() } catch (_: Throwable) {}
                     try { VoskEngine.release() } catch (_: Throwable) {}
-                    try { HamdelEngine.release() } catch (_: Throwable) {}
+                    try { VoskEngine.release() } catch (_: Throwable) {}
                     try { Qwen3Engine.release() } catch (_: Throwable) {}
-                    try { HamdelEngine.release() } catch (_: Throwable) {}
+                    try { VoskEngine.release() } catch (_: Throwable) {}
                     System.gc()
-                    HamdelEngine.ensureModel(this@MainActivity) { pct ->
+                    VoskEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
@@ -307,9 +307,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 val ok = withContext(Dispatchers.IO) {
                     try {
                         System.gc()
-                        HamdelEngine.load(this@MainActivity)
+                        VoskEngine.load(this@MainActivity)
                     } catch (_: OutOfMemoryError) {
-                        HamdelEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
+                        VoskEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
                         false
                     } catch (_: Throwable) {
                         false
@@ -319,13 +319,13 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — تایپ صوتی آفلاین"
+                    binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
                     binding.micButton.isEnabled = true
-                } else if (HamdelEngine.isReady(this@MainActivity)) {
+                } else if (VoskEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
                     binding.micButton.isEnabled = false
                 } else {
-                    binding.status.text = "خطا: ${HamdelEngine.lastError}"
+                    binding.status.text = "خطا: ${VoskEngine.lastError}"
                     binding.micButton.isEnabled = false
                 }
             } catch (e: OutOfMemoryError) {
@@ -336,7 +336,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             } catch (e: Throwable) {
                 if (!isFinishing && !isDestroyed) {
                     binding.progress.visibility = android.view.View.GONE
-                    binding.status.text = "خطا: ${e.message ?: HamdelEngine.lastError}"
+                    binding.status.text = "خطا: ${e.message ?: VoskEngine.lastError}"
                 }
             }
         }
@@ -344,7 +344,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!HamdelEngine.isReady(this)) {
+        if (!VoskEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -454,7 +454,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — تایپ صوتی آفلاین"
+                        binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
                     }
                 }, 3000)
             }
@@ -499,9 +499,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 "برای دیکته در واتساپ، پیام‌رسان و هر برنامه:\n\n" +
                 "۱) تنظیمات گوشی → زبان و ورودی / سیستم\n" +
                 "۲) تشخیص گفتار / Speech services\n" +
-                "۳) «تایپ صوتی آفلاین فارسی» را انتخاب کنید\n\n" +
+                "۳) «Vosk آفلاین فارسی» را انتخاب کنید\n\n" +
                 "مجوز میکروفون باید داده شده باشد.\n" +
-                "داخل خود این برنامه هم دکمه میکروفون = تایپ صوتی آفلاین است."
+                "داخل خود این برنامه هم دکمه میکروفون = Vosk آفلاین است."
             )
             .setPositiveButton("باز کردن تنظیمات") { _, _ ->
                 try {

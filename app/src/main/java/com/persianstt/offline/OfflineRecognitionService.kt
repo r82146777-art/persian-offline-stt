@@ -15,7 +15,7 @@ import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * System RecognitionService — Hamdel engine (Shenava + PersianCorrector).
+ * System RecognitionService — Vosk engine (Shenava + PersianCorrector).
  * Runs in a separate process to avoid OEM permission bugs.
  */
 class OfflineRecognitionService : RecognitionService() {
@@ -55,14 +55,14 @@ class OfflineRecognitionService : RecognitionService() {
             try {
                 // Load Omnilingual offline engine
                 try {
-                    if (!HamdelEngine.isReady(this)) HamdelEngine.ensureModel(this) {}
+                    if (!VoskEngine.isReady(this)) VoskEngine.ensureModel(this) {}
                 } catch (_: Exception) {}
                 val loaded = try {
-                    HamdelEngine.load(this)
+                    VoskEngine.load(this)
                 } catch (_: Exception) {
                     false
                 }
-                if (!loaded && !HamdelEngine.isReady(this)) {
+                if (!loaded && !VoskEngine.isReady(this)) {
                     listening.set(false)
                     err(listener, SpeechRecognizer.ERROR_CLIENT)
                     return@Thread

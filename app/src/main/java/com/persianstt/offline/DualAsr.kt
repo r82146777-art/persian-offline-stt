@@ -3,6 +3,10 @@ package com.persianstt.offline
 import android.content.Context
 import android.util.Log
 
+/**
+ * Pipeline: AudioPreprocessor → Vosk (16kHz + optional grammar) → post-process.
+ * Primary engine = original Vosk small-fa.
+ */
 object DualAsr {
     private const val TAG = "DualAsr"
 
@@ -18,26 +22,20 @@ object DualAsr {
         if (pcm.isEmpty()) return "" to "خالی"
         if (pcm.size < sampleRate / 8) return "" to "کوتاه"
 
-        val prepared = pad(AudioPreprocessor.prepare(pcm, sampleRate), sampleRate)
+        val prepared = pad(AudioPreprocessor.prepare(pcm, 16000), 16000)
         var text = ""
         var err = ""
         try {
-            if (!HamdelEngine.isReady(context)) {
-                return "" to "مدل نیست"
+            if (!VoskEngine.isReady(context)) return "" to "مدل نیست"
+            if (!VoskEngine.load(context)) {
+                return "" to VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }
             }
-            val loaded = HamdelEngine.load(context)
-            if (!loaded) {
-                err = HamdelEngine.lastError.ifBlank { "بارگذاری ناموفق" }
-                return "" to err
-            }
-            text = HamdelEngine.transcribe(prepared, sampleRate)
-            if (text.isBlank()) {
-                err = HamdelEngine.lastError.ifBlank { "بدون‌متن" }
-            }
+            text = VoskEngine.transcribe(prepared, 16000)
+            if (text.isBlank()) err = VoskEngine.lastError.ifBlank { "بدون‌متن" }
         } catch (e: Exception) {
             Log.e(TAG, "transcribe", e)
             err = e.message ?: "خطا"
         }
-        return if (text.isNotBlank()) text to "همدل" else "" to err.ifBlank { "none" }
+        return if (text.isNotBlank()) text to "Vosk" else "" to err.ifBlank { "none" }
     }
 }

@@ -194,6 +194,7 @@ object VoskEngine {
             System.gc()
             Thread.sleep(150)
             model = Model(modelDir(context).absolutePath)
+            try { loadDefaultVocabulary() } catch (_: Exception) {}
             lastError = ""
             lastPhase = "loaded"
             true
@@ -218,14 +219,51 @@ object VoskEngine {
         lastPhase = "released"
     }
 
+    /** Stage 2 — optional Vosk grammar (limited vocabulary) */
+    @Volatile private var grammarJson: String? = null
+
+    fun setCustomVocabulary(words: Collection<String>) {
+        val cleaned = words.map { it.trim() }.filter { it.length in 1..40 }.distinct()
+        if (cleaned.isEmpty()) {
+            grammarJson = null
+            return
+        }
+        // Vosk grammar: JSON array of phrases
+        val arr = cleaned.joinToString(prefix = "[", postfix = "]") { ""${it.replace(""", "")}"" }
+        grammarJson = arr
+    }
+
+    fun loadDefaultVocabulary() {
+        val core = listOf(
+            "سلام", "درود", "عرض سلام", "عرض سلام و ادب و احترام", "ادب و احترام",
+            "صبح بخیر", "شب بخیر", "خداحافظ", "خسته نباشید", "ممنون", "ممنونم",
+            "لطفا", "ببخشید", "بله", "نه", "باشه", "چشم", "دوستان عزیز",
+            "خدمت تمام دوستان عزیز", "یک", "دو", "سه", "چهار", "پنج",
+            "شش", "هفت", "هشت", "نه", "ده", "امروز", "فردا", "دیروز",
+            "خانه", "کار", "خوب", "بد", "آب", "نان", "کمک", "تلفن"
+        )
+        setCustomVocabulary(core)
+    }
+
     @Synchronized
     fun transcribe(pcm16: ShortArray, sampleRate: Int = 16000): String {
         val m = model ?: return ""
-        if (pcm16.isEmpty() || pcm16.size < sampleRate / 6) return ""
+        if (pcm16.isEmpty() || pcm16.size < sampleRate / 8) return ""
+        // ensure 16k path
+        val sr = if (sampleRate == 16000) 16000 else 16000
         return try {
-            val rec = Recognizer(m, sampleRate.toFloat())
+            val g = grammarJson
+            val rec = if (!g.isNullOrBlank()) {
+                try {
+                    Recognizer(m, sr.toFloat(), g)
+                } catch (_: Exception) {
+                    Recognizer(m, sr.toFloat())
+                }
+            } else {
+                Recognizer(m, sr.toFloat())
+            }
             var off = 0
-            val chunk = sampleRate / 2
+            val chunk = sr / 2
             while (off < pcm16.size) {
                 val n = minOf(chunk, pcm16.size - off)
                 rec.acceptWaveForm(pcm16.copyOfRange(off, off + n), n)
@@ -234,11 +272,18 @@ object VoskEngine {
             val json = rec.finalResult
             rec.close()
             val raw = JSONObject(json).optString("text", "").trim()
-            NumberNormalizer.normalize(PersianPostProcess.fix(raw))
+            val fixed = NumberNormalizer.normalize(PersianPostProcess.fix(raw))
+            // stage-3 extra: SimpleVocab if loaded
+            try {
+                PersianCorrector.fix(fixed)
+            } catch (_: Exception) {
+                fixed
+            }
         } catch (e: OutOfMemoryError) {
             lastError = "حافظه کم هنگام تشخیص"
             ""
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            lastError = e.message ?: "خطای تشخیص"
             ""
         }
     }
