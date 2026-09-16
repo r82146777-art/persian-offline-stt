@@ -436,6 +436,17 @@ class VoiceInputMethodService : InputMethodService() {
         } catch (_: Exception) {}
     }
 
+    private fun showLanguagePicker() {
+        imeLang = if (imeLang == "fa") "en" else "fa"
+        currentLayer = 0
+        isShift = false
+        rebuildKeys()
+        statusView?.text = if (imeLang == "en") "English" else "فارسی"
+        try {
+            android.widget.Toast.makeText(this, if (imeLang == "en") "English" else "فارسی", android.widget.Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {}
+    }
+
     private fun makeKey(label: String, w: Float, special: Boolean = false, onTap: () -> Unit) = Button(this).apply {
         text = label
         textSize = if (label.length > 2) 13f else 17f
