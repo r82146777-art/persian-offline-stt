@@ -164,31 +164,22 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "در حال اصلاح هوشمند…"
+        binding.status.text = "اصلاح آفلاین…"
         lifecycleScope.launch {
-            val online = withContext(Dispatchers.IO) {
-                try { DeepSeekClient.correctText(current) } catch (_: Exception) { "" }
-            }
-            val fixed = when {
-                online.isNotBlank() && online != current -> online
-                else -> {
-                    // offline fallback
-                    val local = PersianCorrector.fix(this@MainActivity, current)
-                    NumberNormalizer.normalize(PersianPostProcess.fix(local))
-                }
+            val fixed = withContext(Dispatchers.IO) {
+                OfflineAi.correctText(this@MainActivity, current)
             }
             if (isFinishing || isDestroyed) return@launch
             finalText.clear()
             finalText.append(fixed)
             binding.resultText.setText(fixed)
             binding.resultText.setSelection(fixed.length)
-            val msg = when {
-                online.isNotBlank() && fixed != current -> "متن با هوش مصنوعی اصلاح شد"
-                fixed != current -> "متن اصلاح شد (آفلاین)"
-                else -> "تغییری لازم نبود"
-            }
-            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
-            binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
+            Toast.makeText(
+                this@MainActivity,
+                if (fixed != current) "متن با AI آفلاین اصلاح شد" else "تغییری لازم نبود",
+                Toast.LENGTH_SHORT
+            ).show()
+            binding.status.text = "آماده — Vosk + AI آفلاین"
         }
     }
 
@@ -198,23 +189,18 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "افزودن ایموجی هوشمند…"
+        binding.status.text = "ایموجی آفلاین…"
         lifecycleScope.launch {
-            val online = withContext(Dispatchers.IO) {
-                try { DeepSeekClient.addEmojis(current) } catch (_: Exception) { "" }
+            val enriched = withContext(Dispatchers.IO) {
+                OfflineAi.addEmojis(current)
             }
-            val enriched = if (online.isNotBlank()) online else EmojiHelper.enrich(current)
             if (isFinishing || isDestroyed) return@launch
             finalText.clear()
             finalText.append(enriched)
             binding.resultText.setText(enriched)
             binding.resultText.setSelection(enriched.length)
-            Toast.makeText(
-                this@MainActivity,
-                if (online.isNotBlank()) "ایموجی هوشمند اضافه شد" else "ایموجی محلی اضافه شد",
-                Toast.LENGTH_SHORT
-            ).show()
-            binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
+            Toast.makeText(this@MainActivity, "ایموجی با AI آفلاین اضافه شد", Toast.LENGTH_SHORT).show()
+            binding.status.text = "آماده — Vosk + AI آفلاین"
         }
     }
 
@@ -284,7 +270,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
+                        binding.status.text = "آماده — Vosk + AI آفلاین"
                         binding.micButton.isEnabled = true
                     } else {
                         binding.status.text = "خطا: ${VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
@@ -352,7 +338,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
+                    binding.status.text = "آماده — Vosk + AI آفلاین"
                     binding.micButton.isEnabled = true
                 } else if (VoskEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
@@ -487,7 +473,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — Vosk (موتور اولیه + بهینه‌سازی)"
+                        binding.status.text = "آماده — Vosk + AI آفلاین"
                     }
                 }, 3000)
             }

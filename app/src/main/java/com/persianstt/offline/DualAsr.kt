@@ -31,7 +31,11 @@ object DualAsr {
                 return "" to VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }
             }
             text = VoskEngine.transcribe(prepared, 16000)
-            if (text.isBlank()) err = VoskEngine.lastError.ifBlank { "بدون‌متن" }
+            if (text.isNotBlank()) {
+                text = OfflineAi.correctText(context, text)
+            } else {
+                err = VoskEngine.lastError.ifBlank { "بدون‌متن" }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "transcribe", e)
             err = e.message ?: "خطا"

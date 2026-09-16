@@ -11,8 +11,8 @@ android {
         applicationId = "com.persianstt.offline"
         minSdk = 21
         targetSdk = 35
-        versionCode = 63
-        versionName = "3.17.0"
+        versionCode = 64
+        versionName = "3.18.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }

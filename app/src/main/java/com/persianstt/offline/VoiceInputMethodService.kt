@@ -383,24 +383,24 @@ class VoiceInputMethodService : InputMethodService() {
         }
         statusView?.text = "ایموجی هوشمند…"
         scope.launch(Dispatchers.IO) {
-            val online = try { DeepSeekClient.addEmojis(base.trim()) } catch (_: Exception) { "" }
-            val enriched = if (online.isNotBlank()) online else EmojiHelper.enrich(base.trim())
+            val enriched = OfflineAi.addEmojis(base.trim())
             withContext(Dispatchers.Main) {
                 val ic = currentInputConnection ?: return@withContext
-                // replace last portion if matches base
                 try {
                     val before = ic.getTextBeforeCursor(base.length + 5, 0)?.toString() ?: ""
                     if (before.endsWith(base.trim())) {
                         ic.deleteSurroundingText(base.trim().length, 0)
                         ic.commitText(enriched, 1)
                     } else {
-                        ic.commitText(" " + enriched.removePrefix(base.trim()).trim(), 1)
+                        val extra = enriched.removePrefix(base.trim()).trim()
+                        if (extra.isNotBlank()) ic.commitText(" $extra", 1)
+                        else ic.commitText(enriched, 1)
                     }
                 } catch (_: Exception) {
                     commitText(" ✨")
                 }
                 lastCommitted = enriched
-                statusView?.text = if (online.isNotBlank()) "ایموجی AI" else "ایموجی محلی"
+                statusView?.text = "ایموجی AI آفلاین"
             }
         }
     }
@@ -411,11 +411,7 @@ class VoiceInputMethodService : InputMethodService() {
         if (before.isBlank()) return
         statusView?.text = "اصلاح هوشمند…"
         scope.launch(Dispatchers.IO) {
-            val online = try { DeepSeekClient.correctText(before) } catch (_: Exception) { "" }
-            val fixed = when {
-                online.isNotBlank() -> online
-                else -> NumberNormalizer.normalize(PersianPostProcess.fix(before))
-            }
+            val fixed = OfflineAi.correctText(this@VoiceInputMethodService, before)
             withContext(Dispatchers.Main) {
                 val conn = currentInputConnection ?: return@withContext
                 if (fixed == before) {
@@ -427,7 +423,7 @@ class VoiceInputMethodService : InputMethodService() {
                     conn.commitText(fixed, 1)
                 } catch (_: Exception) {}
                 lastCommitted = fixed
-                statusView?.text = if (online.isNotBlank()) "اصلاح AI" else "اصلاح محلی"
+                statusView?.text = "اصلاح AI آفلاین"
             }
         }
     }
