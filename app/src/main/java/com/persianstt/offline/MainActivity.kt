@@ -184,7 +184,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 if (out != current) "اصلاح شد (AI آفلاین)" else "متن از قبل درست بود",
                 Toast.LENGTH_SHORT
             ).show()
-            binding.status.text = "آماده — Vosk + AI آفلاین"
+            binding.status.text = "آماده — موتور آفلاین Shenava"
         }
     }
 
@@ -205,7 +205,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             binding.resultText.setText(enriched)
             binding.resultText.setSelection(enriched.length)
             Toast.makeText(this@MainActivity, "ایموجی اضافه شد (آفلاین)", Toast.LENGTH_SHORT).show()
-            binding.status.text = "آماده — Vosk + AI آفلاین"
+            binding.status.text = "آماده — موتور آفلاین Shenava"
         }
     }
 
@@ -268,17 +268,22 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
     private fun prepareModel() {
-        if (VoskEngine.isReady(this)) {
+        if (ShenavaEngine.isReady(this) || VoskEngine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
-                    try { VoskEngine.load(this@MainActivity) } catch (_: Throwable) { false }
+                    try {
+                        when {
+                            ShenavaEngine.isReady(this@MainActivity) -> ShenavaEngine.load(this@MainActivity)
+                            else -> VoskEngine.load(this@MainActivity)
+                        }
+                    } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — Vosk + AI آفلاین"
+                        binding.status.text = "آماده — موتور آفلاین Shenava"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا: ${VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
+                        binding.status.text = "خطا: ${(ShenavaEngine.lastError.ifBlank { VoskEngine.lastError }).ifBlank { "بارگذاری ناموفق" }}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -287,7 +292,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور")
-            .setMessage("موتور Vosk (~۵۳ مگ) دانلود شود؟")
+            .setMessage("موتور آفلاین فارسی Shenava (~۱۰۰ مگ) دانلود شود؟\n(مدل آماده، نه ساخت دستی)")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -311,7 +316,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     try { Qwen3Engine.release() } catch (_: Throwable) {}
                     try { VoskEngine.release() } catch (_: Throwable) {}
                     System.gc()
-                    VoskEngine.ensureModel(this@MainActivity) { pct ->
+                    ShenavaEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
@@ -331,9 +336,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 val ok = withContext(Dispatchers.IO) {
                     try {
                         System.gc()
-                        VoskEngine.load(this@MainActivity)
+                        ShenavaEngine.load(this@MainActivity)
                     } catch (_: OutOfMemoryError) {
-                        VoskEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
+                        ShenavaEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
                         false
                     } catch (_: Throwable) {
                         false
@@ -343,13 +348,13 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — Vosk + AI آفلاین"
+                    binding.status.text = "آماده — موتور آفلاین Shenava"
                     binding.micButton.isEnabled = true
-                } else if (VoskEngine.isReady(this@MainActivity)) {
+                } else if (ShenavaEngine.isReady(this@MainActivity) || VoskEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
                     binding.micButton.isEnabled = false
                 } else {
-                    binding.status.text = "خطا: ${VoskEngine.lastError}"
+                    binding.status.text = "خطا: ${ShenavaEngine.lastError.ifBlank { VoskEngine.lastError }}"
                     binding.micButton.isEnabled = false
                 }
             } catch (e: OutOfMemoryError) {
@@ -368,7 +373,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!VoskEngine.isReady(this)) {
+        if (!ShenavaEngine.isReady(this) && !VoskEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -478,7 +483,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — Vosk + AI آفلاین"
+                        binding.status.text = "آماده — موتور آفلاین Shenava"
                     }
                 }, 3000)
             }

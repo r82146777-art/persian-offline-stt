@@ -56,8 +56,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.27.0
-          name: "v3.27.0 - pure offline AI only (no Gemini); Vosk+SymSpell voice pipeline"
+          tag_name: v3.28.0
+          name: "v3.28.0 - real offline Shenava ASR model (not hand-built AI)"
           body: |
             ## نسخه ۳.۱۶.۰
             * موتور تشخیص: Vosk آفلاین
