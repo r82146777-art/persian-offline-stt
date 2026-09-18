@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import dev.ffmpegkit.llama.Llama
 import dev.ffmpegkit.llama.LlamaConfig
+import dev.ffmpegkit.llama.LlamaModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,7 +29,7 @@ object OfflineLlm {
     )
 
     @Volatile var lastError: String = ""
-    @Volatile private var modelHandle: Any? = null
+    @Volatile private var modelHandle: LlamaModel? = null
     private val mutex = Mutex()
 
     fun modelFile(context: Context): File =
