@@ -9,12 +9,12 @@ android {
 
     defaultConfig {
         applicationId = "com.persianstt.offline"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 35
-        versionCode = 74
-        versionName = "3.28.0"
+        versionCode = 75
+        versionName = "3.29.0"
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
@@ -66,4 +66,7 @@ dependencies {
 
     implementation(files("libs/sherpa-onnx.aar"))
     implementation("org.apache.commons:commons-compress:1.26.2")
+
+    // Real offline LLM package (llama.cpp) + download Qwen2.5-0.5B GGUF
+    implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
 }
