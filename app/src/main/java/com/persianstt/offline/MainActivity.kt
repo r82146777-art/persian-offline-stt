@@ -170,7 +170,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             val fixed = withContext(Dispatchers.IO) {
                 val online = try { DeepSeekClient.correctText(current) } catch (_: Exception) { "" }
                 if (online.isNotBlank()) {
-                    source = "DeepSeek"
+                    source = "Gemini"
                     online
                 } else {
                     OfflineAi.correctText(this@MainActivity, current)
@@ -183,7 +183,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             binding.resultText.setSelection(fixed.length)
             val apiErr = DeepSeekClient.lastError
             val msg = when {
-                source == "DeepSeek" && fixed != current -> "اصلاح شد (آنلاین)"
+                source == "DeepSeek" && fixed != current -> "اصلاح شد (Gemini)"
                 fixed != current -> "اصلاح شد (آفلاین)" + if (apiErr.isNotBlank()) " — $apiErr" else ""
                 apiErr.isNotBlank() -> "تغییری نشد — $apiErr"
                 else -> "تغییری لازم نبود"
@@ -205,7 +205,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             val enriched = withContext(Dispatchers.IO) {
                 val online = try { DeepSeekClient.addEmojis(current) } catch (_: Exception) { "" }
                 if (online.isNotBlank()) {
-                    source = "DeepSeek"
+                    source = "Gemini"
                     online
                 } else OfflineAi.addEmojis(current)
             }
@@ -214,7 +214,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             finalText.append(enriched)
             binding.resultText.setText(enriched)
             binding.resultText.setSelection(enriched.length)
-            val msg = if (source == "DeepSeek") "ایموجی آنلاین اضافه شد"
+            val msg = if (source == "DeepSeek") "ایموجی Gemini اضافه شد"
                       else "ایموجی آفلاین اضافه شد" + if (DeepSeekClient.lastError.isNotBlank()) " (${DeepSeekClient.lastError})" else ""
             Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
             binding.status.text = "آماده — Vosk"

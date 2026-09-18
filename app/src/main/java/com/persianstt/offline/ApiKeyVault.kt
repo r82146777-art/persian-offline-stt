@@ -1,21 +1,17 @@
 package com.persianstt.offline
 
-/**
- * Key is not stored as a plain consecutive string.
- * Client-side obfuscation only — not absolute secrecy.
- */
+/** Obfuscated Gemini API key (client-side only). */
 internal object ApiKeyVault {
     private val parts = intArrayOf(
-        26, 98, 98, 102, 108, 15, 108, 41, 101, 63, 11, 57, 44, 96, 54, 93, 56, 126, 101, 110,
-        80, 62, 126, 54, 57, 93, 48, 120, 102, 63, 12, 109, 122, 51, 62
+        40, 88, 97, 66, 109, 81, 91, 1, 53, 68, 58, 90, 7, 78, 126, 42, 99, 21, 66, 66,
+        48, 89, 31, 122, 96, 27, 62, 61, 119, 62, 94, 122, 63, 97, 106, 61, 74, 29, 53, 62,
+        42, 61, 120, 113, 73, 54, 78, 60, 77, 90, 32, 93, 30
     )
     private val mask = intArrayOf(0x69, 0x09, 0x4F, 0x03, 0x0F)
 
     fun reveal(): String {
         val sb = StringBuilder(parts.size)
-        for (i in parts.indices) {
-            sb.append((parts[i] xor mask[i % mask.size]).toChar())
-        }
+        for (i in parts.indices) sb.append((parts[i] xor mask[i % mask.size]).toChar())
         return sb.toString()
     }
 }
