@@ -161,33 +161,29 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
 
     private fun showEditTextDialog() {
-        // always use what user sees NOW in the box (not old buffer only)
         val current = binding.resultText.text?.toString()?.trim().orEmpty()
         if (current.isBlank()) {
             Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "در حال اصلاح…"
+        binding.status.text = "اصلاح با AI آفلاین…"
         lifecycleScope.launch {
-            val (fixed, src) = withContext(Dispatchers.IO) {
-                val online = try { DeepSeekClient.correctText(current) } catch (_: Exception) { "" }
-                if (online.isNotBlank()) online to "Gemini"
-                else OfflineAi.correctText(this@MainActivity, current) to "آفلاین"
+            val fixed = withContext(Dispatchers.IO) {
+                OfflineVoiceAi.improve(this@MainActivity, current).ifBlank {
+                    OfflineAi.correctText(this@MainActivity, current)
+                }
             }
             if (isFinishing || isDestroyed) return@launch
-            // never replace with empty
             val out = fixed.ifBlank { current }
             finalText.clear()
             finalText.append(out)
             binding.resultText.setText(out)
             binding.resultText.setSelection(out.length)
-            val msg = when {
-                out == current && DeepSeekClient.lastError.isNotBlank() ->
-                    "تغییری نشد — ${DeepSeekClient.lastError}"
-                out == current -> "متن از قبل درست بود"
-                else -> "اصلاح شد ($src)"
-            }
-            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this@MainActivity,
+                if (out != current) "اصلاح شد (AI آفلاین)" else "متن از قبل درست بود",
+                Toast.LENGTH_SHORT
+            ).show()
             binding.status.text = "آماده — Vosk + AI آفلاین"
         }
     }
@@ -198,20 +194,17 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "افزودن ایموجی…"
+        binding.status.text = "ایموجی آفلاین…"
         lifecycleScope.launch {
-            val (out, src) = withContext(Dispatchers.IO) {
-                val online = try { DeepSeekClient.addEmojis(current) } catch (_: Exception) { "" }
-                if (online.isNotBlank()) online to "Gemini"
-                else OfflineAi.addEmojis(current) to "آفلاین"
+            val enriched = withContext(Dispatchers.IO) {
+                OfflineAi.addEmojis(current)
             }
             if (isFinishing || isDestroyed) return@launch
-            val enriched = out.ifBlank { OfflineAi.addEmojis(current) }
             finalText.clear()
             finalText.append(enriched)
             binding.resultText.setText(enriched)
             binding.resultText.setSelection(enriched.length)
-            Toast.makeText(this@MainActivity, "ایموجی اضافه شد ($src)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@MainActivity, "ایموجی اضافه شد (آفلاین)", Toast.LENGTH_SHORT).show()
             binding.status.text = "آماده — Vosk + AI آفلاین"
         }
     }
