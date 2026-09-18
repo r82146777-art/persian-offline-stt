@@ -188,7 +188,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 else -> "اصلاح شد ($src)"
             }
             Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-            binding.status.text = "آماده"
+            binding.status.text = "آماده — Vosk + AI آفلاین"
         }
     }
 
@@ -212,7 +212,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             binding.resultText.setText(enriched)
             binding.resultText.setSelection(enriched.length)
             Toast.makeText(this@MainActivity, "ایموجی اضافه شد ($src)", Toast.LENGTH_SHORT).show()
-            binding.status.text = "آماده"
+            binding.status.text = "آماده — Vosk + AI آفلاین"
         }
     }
 
@@ -282,7 +282,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — Vosk"
+                        binding.status.text = "آماده — Vosk + AI آفلاین"
                         binding.micButton.isEnabled = true
                     } else {
                         binding.status.text = "خطا: ${VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
@@ -350,7 +350,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — Vosk"
+                    binding.status.text = "آماده — Vosk + AI آفلاین"
                     binding.micButton.isEnabled = true
                 } else if (VoskEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
@@ -485,7 +485,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — Vosk"
+                        binding.status.text = "آماده — Vosk + AI آفلاین"
                     }
                 }, 3000)
             }

@@ -25,6 +25,9 @@ object SymSpell {
     private val ready = AtomicBoolean(false)
 
     fun ensureLoaded(context: Context) {
+        try {
+            if (freq.isEmpty()) loadCore()
+        } catch (_: Exception) {}
         if (ready.get()) return
         if (!loading.compareAndSet(false, true)) return
         val app = context.applicationContext
@@ -38,10 +41,15 @@ object SymSpell {
                 loading.set(false)
             }
         }
-        // also try sync light core for immediate use
-        try {
-            if (freq.isEmpty()) loadCore()
-        } catch (_: Exception) {}
+    }
+
+    /** Block up to ~2s for full dict on first voice use */
+    fun ensureLoadedBlocking(context: Context, timeoutMs: Long = 2000L) {
+        ensureLoaded(context)
+        val start = System.currentTimeMillis()
+        while (!ready.get() && System.currentTimeMillis() - start < timeoutMs) {
+            try { Thread.sleep(50) } catch (_: Exception) {}
+        }
     }
 
     private fun loadCore() {
