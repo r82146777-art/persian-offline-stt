@@ -98,6 +98,8 @@ override fun onCreate(savedInstanceState: Bundle?) {
             ensureMicPermission()
         }
         if (!prefs.getBoolean(KEY_HIDE_INVITE, false)) showInvite()
+        SymSpell.ensureLoaded(this)
+        OfflineAi.ensure(this)
         prepareModel()
     }
 

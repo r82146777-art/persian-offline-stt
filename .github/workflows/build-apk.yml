@@ -56,8 +56,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.24.0
-          name: "v3.24.0 - safe correct (no ruin), emoji fix, audio boost, Gemini retry 503"
+          tag_name: v3.25.0
+          name: "v3.25.0 - SymSpell LM post + safe offline AI (per guidance docs)"
           body: |
             ## نسخه ۳.۱۶.۰
             * موتور تشخیص: Vosk آفلاین

@@ -19,6 +19,7 @@ object OfflineAi {
         try {
             SimpleVocab.ensureLoaded(context)
             BrainLexicon.ensureLoaded(context)
+            SymSpell.ensureLoaded(context)
         } catch (e: Exception) {
             Log.w(TAG, "ensure", e)
             ready.set(false)
