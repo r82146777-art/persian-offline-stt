@@ -32,7 +32,8 @@ object DualAsr {
             }
             text = VoskEngine.transcribe(prepared, 16000)
             if (text.isNotBlank()) {
-                text = OfflineAi.correctText(context, text)
+                // light cleanup only — full Offline AI on ASR can ruin words
+                text = NumberNormalizer.normalize(PersianPostProcess.fix(text))
             } else {
                 err = VoskEngine.lastError.ifBlank { "بدون‌متن" }
             }

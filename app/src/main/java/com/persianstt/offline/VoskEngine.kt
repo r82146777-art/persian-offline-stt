@@ -23,6 +23,10 @@ object VoskEngine {
     private const val FA_NAME = "vosk-model-small-fa-0.42"
     private const val FA_URL =
         "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip"
+    private val FA_MIRRORS = listOf(
+        "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip",
+        "https://github.com/alphacep/vosk-api/releases/download/v0.3.42/vosk-model-small-fa-0.42.zip"
+    )
 
     @Volatile private var model: Model? = null
     @Volatile var lastError: String = ""
@@ -63,7 +67,20 @@ object VoskEngine {
         val zipFile = File(root, "$FA_NAME.zip")
         try {
             lastPhase = "download"
-            downloadResumable(FA_URL, zipFile) { pct -> onProgress((pct * 85) / 100) }
+            var downloaded = false
+            var lastEx: Exception? = null
+            for (url in FA_MIRRORS) {
+                try {
+                    downloadResumable(url, zipFile) { pct -> onProgress((pct * 85) / 100) }
+                    if (zipFile.exists() && zipFile.length() > 1_000_000) {
+                        downloaded = true
+                        break
+                    }
+                } catch (e: Exception) {
+                    lastEx = e
+                }
+            }
+            if (!downloaded) throw (lastEx ?: IllegalStateException("دانلود ناموفق"))
             onProgress(86)
             if (!zipFile.exists() || zipFile.length() < 1_000_000) {
                 lastError = "دانلود ناقص"
@@ -105,8 +122,8 @@ object VoskEngine {
         val tmp = File(dest.absolutePath + ".part")
         var existing = if (tmp.exists()) tmp.length() else 0L
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 30_000
-            readTimeout = 300_000
+            connectTimeout = 20_000
+            readTimeout = 600_000
             instanceFollowRedirects = true
             if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
         }
@@ -120,11 +137,11 @@ object VoskEngine {
         val totalFromHeader = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
         val total = if (code == 206 && totalFromHeader > 0) existing + totalFromHeader
         else if (totalFromHeader > 0) totalFromHeader else -1L
-        BufferedInputStream(conn.inputStream, 32 * 1024).use { input ->
+        BufferedInputStream(conn.inputStream, 256 * 1024).use { input ->
             FileOutputStream(tmp, existing > 0 && code == 206).use { out ->
                 var done = existing
                 var last = -1
-                val buf = ByteArray(32 * 1024)
+                val buf = ByteArray(256 * 1024)
                 while (true) {
                     val n = input.read(buf)
                     if (n <= 0) break
@@ -152,7 +169,7 @@ object VoskEngine {
     private fun unzip(zipFile: File, destRoot: File, onProgress: (Int) -> Unit) {
         var entries = 0
         ZipInputStream(BufferedInputStream(FileInputStream(zipFile), 32 * 1024)).use { zis ->
-            val buf = ByteArray(32 * 1024)
+            val buf = ByteArray(256 * 1024)
             var entry = zis.nextEntry
             while (entry != null) {
                 val name = entry.name

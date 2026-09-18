@@ -164,10 +164,15 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "اصلاح آفلاین…"
+        binding.status.text = "اصلاح هوشمند…"
         lifecycleScope.launch {
             val fixed = withContext(Dispatchers.IO) {
-                OfflineAi.correctText(this@MainActivity, current)
+                // DeepSeek online first (better), offline fallback
+                val online = try { DeepSeekClient.correctText(current) } catch (_: Exception) { "" }
+                when {
+                    online.isNotBlank() -> online
+                    else -> OfflineAi.correctText(this@MainActivity, current)
+                }
             }
             if (isFinishing || isDestroyed) return@launch
             finalText.clear()
@@ -176,10 +181,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
             binding.resultText.setSelection(fixed.length)
             Toast.makeText(
                 this@MainActivity,
-                if (fixed != current) "متن با AI آفلاین اصلاح شد" else "تغییری لازم نبود",
+                if (fixed != current) "متن اصلاح شد" else "تغییری لازم نبود",
                 Toast.LENGTH_SHORT
             ).show()
-            binding.status.text = "آماده — Vosk + AI آفلاین"
+            binding.status.text = "آماده — Vosk"
         }
     }
 
@@ -189,18 +194,22 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "ایموجی آفلاین…"
+        binding.status.text = "افزودن ایموجی…"
         lifecycleScope.launch {
             val enriched = withContext(Dispatchers.IO) {
-                OfflineAi.addEmojis(current)
+                val online = try { DeepSeekClient.addEmojis(current) } catch (_: Exception) { "" }
+                when {
+                    online.isNotBlank() -> online
+                    else -> OfflineAi.addEmojis(current)
+                }
             }
             if (isFinishing || isDestroyed) return@launch
             finalText.clear()
             finalText.append(enriched)
             binding.resultText.setText(enriched)
             binding.resultText.setSelection(enriched.length)
-            Toast.makeText(this@MainActivity, "ایموجی با AI آفلاین اضافه شد", Toast.LENGTH_SHORT).show()
-            binding.status.text = "آماده — Vosk + AI آفلاین"
+            Toast.makeText(this@MainActivity, "ایموجی اضافه شد", Toast.LENGTH_SHORT).show()
+            binding.status.text = "آماده — Vosk"
         }
     }
 
@@ -270,7 +279,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — Vosk + AI آفلاین"
+                        binding.status.text = "آماده — Vosk"
                         binding.micButton.isEnabled = true
                     } else {
                         binding.status.text = "خطا: ${VoskEngine.lastError.ifBlank { "بارگذاری ناموفق" }}"
@@ -338,7 +347,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — Vosk + AI آفلاین"
+                    binding.status.text = "آماده — Vosk"
                     binding.micButton.isEnabled = true
                 } else if (VoskEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
@@ -473,7 +482,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — Vosk + AI آفلاین"
+                        binding.status.text = "آماده — Vosk"
                     }
                 }, 3000)
             }

@@ -56,6 +56,7 @@ class VoiceInputMethodService : InputMethodService() {
     companion object {
         private const val SAMPLE_RATE = 16000
         private const val LONG_PRESS_MS = 550L
+        private const val KEY_H = 128 // taller keys like Gboard
         private const val PREFS = "hamdel_stt"
         private const val KEY_CLIPBOARD = "clipboard_history"
         private const val MAX_CLIPS = 20
@@ -256,9 +257,9 @@ class VoiceInputMethodService : InputMethodService() {
                 addNumberPad(c)
             }
             else -> {
-                addRow(c, SYM1)
-                addRow(c, SYM2)
-                addRow(c, SYM3)
+                addSymbolRow(c, SYM1)
+                addSymbolRow(c, SYM2)
+                addSymbolRow(c, SYM3)
             }
         }
         addBottom(c)
@@ -294,6 +295,18 @@ class VoiceInputMethodService : InputMethodService() {
     }
 
 
+    private fun addSymbolRow(parent: LinearLayout, keys: List<String>) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            layoutParams = lpMW().apply { setMargins(2, 2, 2, 2) }
+        }
+        keys.forEach { l ->
+            row.addView(makeKey(l, 1f) { commitRaw(l) })
+        }
+        parent.addView(row)
+    }
+
     /** Number pad: 3x4 digits + right column ⌫ / ۱۲۳|فا / فاصله / ↵ */
     private fun addNumberPad(parent: LinearLayout) {
         val outer = LinearLayout(this).apply {
@@ -305,11 +318,16 @@ class VoiceInputMethodService : InputMethodService() {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 4f)
         }
+        // Western digits type reliably in all apps; labels can stay Persian-looking
         val rows = listOf(
-            listOf("۱", "۲", "۳"),
-            listOf("۴", "۵", "۶"),
-            listOf("۷", "۸", "۹"),
-            listOf("*", "۰", "#")
+            listOf("1", "2", "3"),
+            listOf("4", "5", "6"),
+            listOf("7", "8", "9"),
+            listOf("*", "0", "#")
+        )
+        val faLabel = mapOf(
+            "0" to "۰", "1" to "۱", "2" to "۲", "3" to "۳", "4" to "۴",
+            "5" to "۵", "6" to "۶", "7" to "۷", "8" to "۸", "9" to "۹"
         )
         rows.forEach { keys ->
             val row = LinearLayout(this).apply {
@@ -318,7 +336,8 @@ class VoiceInputMethodService : InputMethodService() {
                 layoutParams = lpMW().apply { setMargins(2, 2, 2, 2) }
             }
             keys.forEach { k ->
-                row.addView(makeKey(k, 1f) { commitText(k) })
+                val btn = makeKey(faLabel[k] ?: k, 1f) { commitRaw(k) }
+                row.addView(btn)
             }
             left.addView(row)
         }
@@ -328,8 +347,8 @@ class VoiceInputMethodService : InputMethodService() {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             layoutParams = lpMW().apply { setMargins(2, 2, 2, 2) }
         }
-        listOf("+", "-", "/", ".", "،").forEach { s ->
-            sideSym.addView(makeKey(s, 1f) { commitText(s) })
+        listOf("+", "-", "/", ".", ",", "،").forEach { s ->
+            sideSym.addView(makeKey(s, 1f) { commitRaw(s) })
         }
         left.addView(sideSym)
 
@@ -338,21 +357,21 @@ class VoiceInputMethodService : InputMethodService() {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.2f)
         }
         right.addView(makeKey("⌫", 1f, true) { deleteLast() }.also {
-            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100).apply { setMargins(3, 3, 3, 3) }
+            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, KEY_H).apply { setMargins(3, 3, 3, 3) }
         })
         right.addView(makeKey("فا", 1f, true) {
             currentLayer = 0; rebuildKeys()
         }.also {
-            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100).apply { setMargins(3, 3, 3, 3) }
+            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, KEY_H).apply { setMargins(3, 3, 3, 3) }
         })
         right.addView(makeKey("فاصله", 1f, true) { commitText(" ") }.also {
-            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100).apply { setMargins(3, 3, 3, 3) }
+            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, KEY_H).apply { setMargins(3, 3, 3, 3) }
         })
         right.addView(makeKey("↵", 1f, true) {
             currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
         }.also {
-            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100).apply { setMargins(3, 3, 3, 3) }
+            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, KEY_H).apply { setMargins(3, 3, 3, 3) }
         })
 
         outer.addView(left)
@@ -425,7 +444,7 @@ class VoiceInputMethodService : InputMethodService() {
                     commitText(v)
                     popup.dismiss()
                 }.also { b ->
-                    b.layoutParams = LinearLayout.LayoutParams(90, 100).apply { setMargins(4, 0, 4, 0) }
+                    b.layoutParams = LinearLayout.LayoutParams(96, KEY_H).apply { setMargins(4, 0, 4, 0) }
                 })
             }
             popup.contentView = box
@@ -449,7 +468,7 @@ class VoiceInputMethodService : InputMethodService() {
 
     private fun makeKey(label: String, w: Float, special: Boolean = false, onTap: () -> Unit) = Button(this).apply {
         text = label
-        textSize = if (label.length > 2) 13f else 17f
+        textSize = if (label.length > 2) 15f else 20f
         setTextColor(TEXT)
         setBackgroundColor(if (special) KEY_BG_SP else KEY_BG)
         isAllCaps = false
@@ -468,7 +487,7 @@ class VoiceInputMethodService : InputMethodService() {
         }
         // prevent Button class name being appended in some TalkBack modes
         stateListAnimator = null
-        layoutParams = LinearLayout.LayoutParams(0, 100, w).apply { setMargins(3, 3, 3, 3) }
+        layoutParams = LinearLayout.LayoutParams(0, KEY_H, w).apply { setMargins(2, 2, 2, 2) }
         setOnClickListener { onTap(); playClick() }
         val variants = letterVariants[label.lowercase()] ?: letterVariants[label]
         if (variants != null && variants.size > 1) {
@@ -480,11 +499,33 @@ class VoiceInputMethodService : InputMethodService() {
         }
     }
 
+    /** Guaranteed insert for digits/symbols (no shift logic). */
+    private fun commitRaw(text: String) {
+        val ic = currentInputConnection ?: return
+        try {
+            ic.beginBatchEdit()
+            ic.commitText(text, 1)
+            ic.endBatchEdit()
+        } catch (_: Exception) {
+            try { ic.commitText(text, 1) } catch (_: Exception) {}
+        }
+        playClick()
+    }
+
     private fun commitText(text: String) {
         val ic: InputConnection = currentInputConnection ?: return
-        val out = if (isShift && text.length == 1) text.uppercase() else text
-        ic.commitText(out, 1)
-        if (isShift) { isShift = false; rebuildKeys() }
+        val out = if (isShift && text.length == 1 && text[0] in 'a'..'z') text.uppercase() else text
+        try {
+            ic.beginBatchEdit()
+            ic.commitText(out, 1)
+            ic.endBatchEdit()
+        } catch (_: Exception) {
+            try { ic.commitText(out, 1) } catch (_: Exception) {}
+        }
+        if (isShift && imeLang == "en") {
+            isShift = false
+            rebuildKeys()
+        }
     }
 
     private fun deleteLast() { currentInputConnection?.deleteSurroundingText(1, 0) }
@@ -518,7 +559,8 @@ class VoiceInputMethodService : InputMethodService() {
         }
         statusView?.text = "ایموجی هوشمند…"
         scope.launch(Dispatchers.IO) {
-            val enriched = OfflineAi.addEmojis(base.trim())
+            val online = try { DeepSeekClient.addEmojis(base.trim()) } catch (_: Exception) { "" }
+            val enriched = if (online.isNotBlank()) online else OfflineAi.addEmojis(base.trim())
             withContext(Dispatchers.Main) {
                 val ic = currentInputConnection ?: return@withContext
                 try {
@@ -546,7 +588,8 @@ class VoiceInputMethodService : InputMethodService() {
         if (before.isBlank()) return
         statusView?.text = "اصلاح هوشمند…"
         scope.launch(Dispatchers.IO) {
-            val fixed = OfflineAi.correctText(this@VoiceInputMethodService, before)
+            val online = try { DeepSeekClient.correctText(before) } catch (_: Exception) { "" }
+            val fixed = if (online.isNotBlank()) online else OfflineAi.correctText(this@VoiceInputMethodService, before)
             withContext(Dispatchers.Main) {
                 val conn = currentInputConnection ?: return@withContext
                 if (fixed == before) {
