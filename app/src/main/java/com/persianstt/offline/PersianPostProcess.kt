@@ -6,6 +6,11 @@ package com.persianstt.offline
 object PersianPostProcess {
 
     private val phraseFixes = listOf(
+        Regex("عرضه\\s*سل") to "عرض سلام",
+        Regex("عرز\\s*سلام") to "عرض سلام",
+        Regex("عدابه") to "ادب",
+        Regex("د\\s*شتانه") to "دوستان",
+
         Regex("""مارض""") to "با عرض",
         Regex("""باعرض""") to "با عرض",
         Regex("""عرضه\s*سل""") to "عرض سلام",
