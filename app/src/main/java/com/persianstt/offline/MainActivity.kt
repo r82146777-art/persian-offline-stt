@@ -166,35 +166,24 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "اصلاح با LLM آفلاین (Qwen)…"
+        binding.status.text = "اصلاح…"
         lifecycleScope.launch {
-            val fixed = try {
-                val llm = OfflineLlm.correctText(this@MainActivity, current)
-                when {
-                    llm.isNotBlank() -> llm
-                    else -> withContext(Dispatchers.IO) {
-                        OfflineVoiceAi.improve(this@MainActivity, current)
-                            .ifBlank { OfflineAi.correctText(this@MainActivity, current) }
-                    }
-                }
-            } catch (_: Exception) {
-                withContext(Dispatchers.IO) {
-                    OfflineAi.correctText(this@MainActivity, current)
-                }
+            val fixed = withContext(Dispatchers.IO) {
+                val local = OfflineVoiceAi.improve(this@MainActivity, current)
+                    .ifBlank { OfflineAi.correctText(this@MainActivity, current) }
+                    .ifBlank { current }
+                local
             }
             if (isFinishing || isDestroyed) return@launch
-            val out = fixed.ifBlank { current }
-            finalText.clear(); finalText.append(out)
-            binding.resultText.setText(out)
-            binding.resultText.setSelection(out.length)
-            val msg = when {
-                OfflineLlm.lastError.isNotBlank() && out == current ->
-                    "LLM: ${OfflineLlm.lastError}"
-                out != current -> "اصلاح شد (LLM آفلاین Qwen)"
-                else -> "متن از قبل درست بود"
-            }
-            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-            binding.status.text = "آماده — Shenava + Qwen آفلاین"
+            finalText.clear(); finalText.append(fixed)
+            binding.resultText.setText(fixed)
+            binding.resultText.setSelection(fixed.length)
+            Toast.makeText(
+                this@MainActivity,
+                if (fixed != current) "اصلاح شد" else "تغییری لازم نبود",
+                Toast.LENGTH_SHORT
+            ).show()
+            binding.status.text = "آماده"
         }
     }
 
@@ -204,22 +193,15 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "ایموجی با LLM آفلاین…"
-        lifecycleScope.launch {
-            val enriched = try {
-                val llm = OfflineLlm.addEmojis(this@MainActivity, current)
-                if (llm.isNotBlank()) llm
-                else withContext(Dispatchers.IO) { OfflineAi.addEmojis(current) }
-            } catch (_: Exception) {
-                withContext(Dispatchers.IO) { OfflineAi.addEmojis(current) }
-            }
-            if (isFinishing || isDestroyed) return@launch
-            finalText.clear(); finalText.append(enriched)
-            binding.resultText.setText(enriched)
-            binding.resultText.setSelection(enriched.length)
-            Toast.makeText(this@MainActivity, "ایموجی اضافه شد", Toast.LENGTH_SHORT).show()
-            binding.status.text = "آماده — Shenava + Qwen آفلاین"
-        }
+        val enriched = OfflineAi.addEmojis(current)
+        finalText.clear(); finalText.append(enriched)
+        binding.resultText.setText(enriched)
+        binding.resultText.setSelection(enriched.length)
+        Toast.makeText(
+            this,
+            if (enriched != current) "ایموجی اضافه شد" else "ایموجی‌ای پیدا نشد",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun showSoundSettings() {

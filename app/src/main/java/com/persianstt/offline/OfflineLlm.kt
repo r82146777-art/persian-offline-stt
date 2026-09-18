@@ -145,6 +145,7 @@ object OfflineLlm {
     }
 
     suspend fun correctText(context: Context, input: String): String {
+        // Small Qwen often ruins Persian — validate strictly
         if (input.isBlank()) return input
         if (!ensureLoaded(context)) return ""
         val m = modelHandle ?: return ""
@@ -152,12 +153,12 @@ object OfflineLlm {
             withContext(Dispatchers.IO) {
                 val result = Llama.complete(
                     m,
-                    prompt = "متن فارسی زیر را فقط از نظر املا و فاصله اصلاح کن. " +
-                        "اگر درست است همان را برگردان. بدون توضیح:\n$input",
-                    systemPrompt = "تو ویرایشگر فارسی هستی. فقط متن نهایی را بنویس.",
-                    maxTokens = 256
+                    prompt = "Correct Persian spelling only. Return ONLY the corrected text:\n$input",
+                    systemPrompt = "Output only the final Persian text.",
+                    maxTokens = 128
                 )
-                cleanOutput(result.text, input)
+                val out = cleanOutput(result.text)
+                if (isSafeCorrection(input, out)) out else ""
             }
         } catch (e: Exception) {
             lastError = e.message ?: "خطای LLM"
@@ -166,32 +167,26 @@ object OfflineLlm {
         }
     }
 
-    suspend fun addEmojis(context: Context, input: String): String {
-        if (input.isBlank()) return input
-        if (!ensureLoaded(context)) return ""
-        val m = modelHandle ?: return ""
-        return try {
-            withContext(Dispatchers.IO) {
-                val result = Llama.complete(
-                    m,
-                    prompt = "به این متن فارسی ایموجی مناسب اضافه کن؛ جملات را عوض نکن. فقط متن نهایی:\n$input",
-                    systemPrompt = "فقط خروجی نهایی را بنویس.",
-                    maxTokens = 256
-                )
-                cleanOutput(result.text, input).ifBlank { input }
-            }
-        } catch (e: Exception) {
-            lastError = e.message ?: "خطای LLM"
-            Log.e(TAG, "emoji", e)
-            ""
-        }
+    /** Small LLM rewrites text — emoji must use OfflineAi rules, not this. */
+    suspend fun addEmojis(context: Context, input: String): String = ""
+
+    private fun isSafeCorrection(original: String, candidate: String): Boolean {
+        if (candidate.isBlank()) return false
+        if (candidate == original) return true
+        val low = candidate.lowercase()
+        if ("correct" in low || "spelling" in low || "output" in low) return false
+        if (candidate.length > original.length * 2) return false
+        if (candidate.length < original.length / 3) return false
+        val o = original.replace(" ", "").toSet()
+        val c = candidate.replace(" ", "").toSet()
+        if (o.isNotEmpty() && o.intersect(c).size * 2 < o.size) return false
+        return true
     }
 
-    private fun cleanOutput(raw: String, fallback: String): String {
-        var t = raw.trim()
-            .removePrefix("```").removeSuffix("```").trim()
-        t = t.replace(Regex("^(متن اصلاح[‌ ]*شده[:：]?\\s*|خروجی[:：]?\\s*|نتیجه[:：]?\\s*)"), "")
-        if (t.isBlank()) return fallback
+    private fun cleanOutput(raw: String): String {
+        var t = raw.trim().removePrefix("```").removeSuffix("```").trim()
+        t = t.replace(Regex("^(متن اصلاح[‌ ]*شده[:：]?\\s*|خروجی[:：]?\\s*|نتیجه[:：]?\\s*|Corrected[:：]?\\s*)"), "")
+        t = t.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: t
         return t
     }
 
