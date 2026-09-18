@@ -10,144 +10,156 @@ import kotlin.concurrent.thread
 import kotlin.math.min
 
 /**
- * SymSpell-style offline spell correction for Persian.
- * Loads frequency dictionary from assets/hamdel_brain.txt (word per line).
- * Very light RAM; safe for mid-range phones.
+ * Lightweight SymSpell-style corrector for Persian (offline).
+ * Uses frequency dictionary from assets/hamdel_brain.txt (~50k).
+ * Edit distance 1–2, RAM-friendly, no neural net.
  */
 object SymSpell {
     private const val TAG = "SymSpell"
-    private const val MAX_EDIT = 2
+    private const val ASSET = "hamdel_brain.txt"
+    private const val FILE = "symspell_freq.txt"
 
-    @Volatile private var dictionary: Map<String, Long> = emptyMap()
+    @Volatile private var freq: Map<String, Int> = emptyMap()
     @Volatile private var deletes: Map<String, List<String>> = emptyMap()
     private val loading = AtomicBoolean(false)
     private val ready = AtomicBoolean(false)
 
     fun ensureLoaded(context: Context) {
-        if (ready.get() || !loading.compareAndSet(false, true)) return
+        if (ready.get()) return
+        if (!loading.compareAndSet(false, true)) return
         val app = context.applicationContext
-        thread(name = "symspell-load", isDaemon = true) {
+        thread(name = "symspell", isDaemon = true) {
             try {
                 load(app)
                 ready.set(true)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "load fail", e)
             } finally {
                 loading.set(false)
             }
         }
+        // also try sync light core for immediate use
+        try {
+            if (freq.isEmpty()) loadCore()
+        } catch (_: Exception) {}
     }
 
-    fun isReady(): Boolean = ready.get()
+    private fun loadCore() {
+        val core = listOf(
+            "سلام", "درود", "عرض", "ادب", "احترام", "ممنون", "متشکرم", "خسته",
+            "نباشید", "خداحافظ", "بله", "نه", "باشه", "لطفا", "ببخشید", "دوستان",
+            "عزیز", "امروز", "فردا", "خانه", "کار", "خوب", "عالی", "صبح", "بخیر",
+            "شب", "می‌روم", "می‌کنم", "می‌شود", "می‌خواهم"
+        )
+        val f = LinkedHashMap<String, Int>()
+        core.forEachIndexed { i, w -> f[w] = 10000 - i }
+        freq = f
+    }
 
     private fun load(context: Context) {
-        val words = LinkedHashMap<String, Long>(80_000)
-        // asset brain
-        try {
-            context.assets.open("hamdel_brain.txt").bufferedReader().useLines { lines ->
-                var i = 0L
-                lines.forEach { line ->
-                    val w = line.trim()
-                    if (w.isEmpty() || w.startsWith("#")) return@forEach
-                    // higher frequency for earlier lines (common words first in file)
-                    val freq = (100_000L - i).coerceAtLeast(1)
-                    words[w] = maxOf(words[w] ?: 0L, freq)
-                    i++
-                    if (i % 8000L == 0L) try { Thread.sleep(1) } catch (_: Exception) {}
-                }
+        val dest = File(context.filesDir, FILE)
+        if (!dest.exists() || dest.length() < 10_000) {
+            context.assets.open(ASSET).use { inp ->
+                dest.outputStream().use { out -> inp.copyTo(out) }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "no asset brain", e)
         }
-        // files dir copy
-        try {
-            val f = File(context.filesDir, "hamdel_brain.txt")
-            if (f.exists()) {
-                f.bufferedReader().useLines { lines ->
-                    var i = 0L
-                    lines.forEach { line ->
-                        val w = line.trim()
-                        if (w.isEmpty() || w.startsWith("#")) return@forEach
-                        words.putIfAbsent(w, 10_000L - (i % 9000))
-                        i++
-                    }
+        val f = HashMap<String, Int>(60_000)
+        var rank = 50_000
+        BufferedReader(InputStreamReader(dest.inputStream(), Charsets.UTF_8), 64 * 1024).use { br ->
+            var line: String?
+            while (br.readLine().also { line = it } != null) {
+                val w = line!!.trim()
+                if (w.isEmpty() || w.startsWith("#")) continue
+                // support "word" or "word freq"
+                val parts = w.split(Regex("\\s+"))
+                val word = parts[0]
+                val fr = if (parts.size > 1) parts[1].toIntOrNull() ?: rank else rank
+                if (word.length in 2..30) {
+                    f[word] = maxOf(f[word] ?: 0, fr)
+                    rank = (rank - 1).coerceAtLeast(1)
                 }
             }
-        } catch (_: Exception) {}
-
-        // core high-priority
-        val core = listOf(
-            "سلام", "درود", "عرض", "ادب", "احترام", "ممنون", "متشکرم", "لطفاً", "ببخشید",
-            "خسته", "نباشید", "خداحافظ", "صبح", "بخیر", "شب", "بله", "نه", "باشه",
-            "می‌روم", "می‌کنم", "می‌کنید", "می‌شود", "می‌خواهم", "دوستان", "عزیز",
-            "امروز", "فردا", "دیروز", "خانه", "کار", "خوب", "عالی"
-        )
-        core.forEach { words[it] = 500_000L }
-
-        dictionary = words
-
-        // build delete index for edit distance 1 only (memory safe)
-        val del = HashMap<String, MutableList<String>>(words.size * 2)
-        for (w in words.keys) {
-            if (w.length < 2 || w.length > 18) continue
-            for (d in edits1(w)) {
+        }
+        // generate deletes (edit distance 1) for words up to reasonable length
+        val del = HashMap<String, ArrayList<String>>(f.size * 2)
+        var n = 0
+        for (word in f.keys) {
+            if (word.length > 14) continue
+            for (d in deletes1(word)) {
                 val list = del.getOrPut(d) { ArrayList(2) }
-                if (list.size < 6 && w !in list) list.add(w)
+                if (list.size < 8 && word !in list) list.add(word)
             }
+            n++
+            if (n % 4000 == 0) try { Thread.sleep(1) } catch (_: Exception) {}
         }
+        freq = f
         deletes = del
-        Log.i(TAG, "SymSpell ready words=${words.size} deletes=${del.size}")
+        Log.i(TAG, "loaded freq=${f.size} deletes=${del.size}")
         System.gc()
     }
 
-    private fun edits1(word: String): Set<String> {
-        val res = HashSet<String>()
+    private fun deletes1(word: String): List<String> {
+        val out = ArrayList<String>(word.length)
         for (i in word.indices) {
-            res.add(word.removeRange(i, i + 1))
+            out.add(word.removeRange(i, i + 1))
         }
-        return res
+        return out
     }
 
     fun correctWord(word: String): String {
-        if (word.length <= 1) return word
+        if (word.length < 2) return word
         if (word.all { it.isDigit() || it in ".,/\\-_%+۰۱۲۳۴۵۶۷۸۹" }) return word
-        val dict = dictionary
-        if (dict.isEmpty()) return word
-        if (dict.containsKey(word)) return word
-
-        // candidates from deletes
-        val candidates = LinkedHashSet<String>()
-        if (deletes.containsKey(word)) {
-            deletes[word]?.let { candidates.addAll(it) }
-        }
-        for (e in edits1(word)) {
-            if (dict.containsKey(e)) candidates.add(e)
-            deletes[e]?.let { candidates.addAll(it) }
-        }
+        val f = freq
+        if (f.isEmpty()) return word
+        if (f.containsKey(word)) return word
 
         var best = word
-        var bestFreq = -1L
-        var bestDist = MAX_EDIT + 1
-        for (c in candidates) {
-            val d = levenshtein(word, c, MAX_EDIT)
-            if (d < 0 || d > MAX_EDIT) continue
-            val f = dict[c] ?: 0L
-            if (d < bestDist || (d == bestDist && f > bestFreq)) {
-                bestDist = d
-                bestFreq = f
+        var bestScore = -1
+
+        // exact delete match → candidates
+        val cands = LinkedHashSet<String>()
+        deletes[word]?.let { cands.addAll(it) }
+        for (d in deletes1(word)) {
+            if (f.containsKey(d)) cands.add(d)
+            deletes[d]?.let { cands.addAll(it) }
+        }
+        // also try words with same prefix
+        val pref = word.take(2)
+        var checked = 0
+        for ((w, fr) in f) {
+            if (w.startsWith(pref) && kotlin.math.abs(w.length - word.length) <= 2) {
+                cands.add(w)
+            }
+            if (++checked > 3000) break
+        }
+
+        for (c in cands) {
+            val dist = editDistance(word, c, max = 2)
+            if (dist < 0) continue
+            val score = (f[c] ?: 1) - dist * 500
+            if (score > bestScore) {
+                bestScore = score
                 best = c
             }
         }
         return best
     }
 
+    /** Correct only tokens that look wrong; keep known-good words. */
     fun correctSentence(text: String): String {
-        if (text.isBlank() || dictionary.isEmpty()) return text
-        return text.split(Regex("\\s+")).filter { it.isNotEmpty() }
-            .joinToString(" ") { correctWord(it) }
+        if (text.isBlank() || freq.isEmpty()) return text
+        return text.split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ") { tok ->
+            val core = tok.trim('،', '.', '!', '؟', ':', ';', ',', '"', '\'')
+            if (core.length < 2) tok
+            else {
+                val fixed = correctWord(core)
+                if (fixed == core) tok else tok.replace(core, fixed)
+            }
+        }
     }
 
-    private fun levenshtein(a: String, b: String, max: Int): Int {
+    private fun editDistance(a: String, b: String, max: Int): Int {
+        if (a == b) return 0
         if (kotlin.math.abs(a.length - b.length) > max) return -1
         val m = a.length; val n = b.length
         var prev = IntArray(n + 1) { it }
@@ -159,11 +171,12 @@ object SymSpell {
             for (j in 1..n) {
                 val cost = if (ca == b[j - 1]) 0 else 1
                 cur[j] = min(min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost)
-                if (cur[j] < rowMin) rowMin = cur[j]
+                rowMin = min(rowMin, cur[j])
             }
             if (rowMin > max) return -1
             val tmp = prev; prev = cur; cur = tmp
         }
-        return prev[n]
+        val d = prev[n]
+        return if (d <= max) d else -1
     }
 }

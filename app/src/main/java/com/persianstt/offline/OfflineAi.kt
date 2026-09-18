@@ -5,10 +5,11 @@ import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Conservative offline corrector:
- * - Only fix KNOWN bad ASR phrases / clear typos
- * - Never "improve" already-correct text with aggressive Levenshtein
- * - Emoji: insert by keyword without wiping the sentence
+ * Offline pipeline (from design notes):
+ * 1) hard ASR phrase maps
+ * 2) SymSpell frequency dictionary (50k)
+ * 3) light Persian post-process
+ * Emoji: FastText-style keyword rules (no neural net needed)
  */
 object OfflineAi {
     private const val TAG = "OfflineAi"
@@ -26,7 +27,6 @@ object OfflineAi {
         }
     }
 
-    /** Only known-bad → good. Sorted longest-first. */
     private val hardFixes: List<Pair<String, String>> = listOf(
         "عرز سلام عدابه احترام" to "عرض سلام و ادب و احترام",
         "عرضه سل م اتاب اختر" to "عرض سلام و ادب و احترام",
@@ -39,7 +39,6 @@ object OfflineAi {
         "عرضسلا" to "عرض سلام",
         "عدابه احترام" to "ادب و احترام",
         "اتاب اختر" to "ادب و احترام",
-        "عداب احترام" to "ادب و احترام",
         "د شتانه عزی" to "دوستان عزیز",
         "دشتانه عزیز" to "دوستان عزیز",
         "خدمته تمام" to "خدمت تمام",
@@ -53,7 +52,6 @@ object OfflineAi {
         "می شود" to "می‌شود",
         "می خواهم" to "می‌خواهم",
         "می تونم" to "می‌تونم",
-        "می تونید" to "می‌تونید",
         "میکنم" to "می‌کنم",
         "میکنید" to "می‌کنید",
         "میروم" to "می‌روم",
@@ -62,43 +60,43 @@ object OfflineAi {
         "هماکنون" to "هم‌اکنون"
     ).sortedByDescending { it.first.length }
 
-    /**
-     * Safe correct: if text already looks fine, return as-is (only light normalize).
-     */
     fun correctText(context: Context?, raw: String): String {
         if (raw.isBlank()) return raw
         if (context != null) ensure(context)
 
         val original = raw.trim().replace(Regex("\\s+"), " ")
         var t = original
-
-        // strip model junk prefixes if any
         t = t.replace(Regex("^(متن اصلاح[‌ ]*شده[:：]?\\s*|خروجی[:：]?\\s*|نتیجه[:：]?\\s*)"), "")
 
-        var changed = false
+        var hardHit = false
         for ((bad, good) in hardFixes) {
             if (t.contains(bad)) {
                 t = t.replace(bad, good)
-                changed = true
+                hardHit = true
             }
         }
 
-        // mi + space + verb → half-space (safe)
-        val t2 = t.replace(Regex("""\bمی\s+([آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی]+)"""), "می‌$1")
-        if (t2 != t) {
-            t = t2
-            changed = true
+        val tMi = t.replace(Regex("""\bمی\s+([آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی]+)"""), "می‌$1")
+        if (tMi != t) t = tMi
+
+        // SymSpell only if still different from clean dictionary words
+        try {
+            val sym = SymSpell.correctSentence(t)
+            // accept sym only if not dramatically shorter (avoid wiping)
+            if (sym.isNotBlank() && sym.length >= t.length * 7 / 10) {
+                t = sym
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "symspell", e)
         }
 
-        // only light post-process if we already changed something, or always normalize numbers/spaces
         t = PersianPostProcess.fix(t)
         t = NumberNormalizer.normalize(t)
         t = t.replace(Regex("\\s+"), " ").trim()
 
-        // If we didn't apply any hard fix and result is shorter/worse, keep original
-        if (!changed && t.length < original.length * 0.8) return original
-        // If nothing meaningful changed, keep original (don't invent damage)
-        if (!changed && t == original) return original
+        // if nothing useful and we only risk damage — keep original
+        if (!hardHit && t == original) return original
+        if (t.isBlank()) return original
         return t
     }
 
@@ -133,25 +131,18 @@ object OfflineAi {
     fun addEmojis(text: String): String {
         if (text.isBlank()) return "😊"
         var t = text.trim()
-        val had = t
         val used = mutableSetOf<String>()
         for (rule in emojiRules.sortedByDescending { r -> r.keys.maxOf { it.length } }) {
             for (k in rule.keys.sortedByDescending { it.length }) {
                 if (!t.contains(k)) continue
-                if (t.contains(rule.emoji)) {
-                    used.add(rule.emoji)
-                    continue
-                }
-                if (rule.emoji in used) continue
+                if (t.contains(rule.emoji) || rule.emoji in used) continue
                 val idx = t.indexOf(k) + k.length
                 t = t.substring(0, idx) + " " + rule.emoji + t.substring(idx)
                 used.add(rule.emoji)
                 break
             }
         }
-        if (used.isEmpty() && t == had) {
-            t = "$t ✨"
-        }
+        if (used.isEmpty()) t = "$t ✨"
         return t.replace(Regex("\\s+"), " ").trim()
     }
 }
