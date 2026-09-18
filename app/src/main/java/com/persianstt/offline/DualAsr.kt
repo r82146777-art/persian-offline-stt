@@ -12,7 +12,7 @@ object DualAsr {
 
     fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
         val pre = sampleRate / 5
-        val post = sampleRate / 2
+        val post = (sampleRate * 0.9).toInt()
         val out = ShortArray(pre + pcm.size + post)
         System.arraycopy(pcm, 0, out, pre, pcm.size)
         return out

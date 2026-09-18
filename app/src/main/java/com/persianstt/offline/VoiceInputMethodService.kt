@@ -559,7 +559,8 @@ class VoiceInputMethodService : InputMethodService() {
         }
         statusView?.text = "ایموجی هوشمند…"
         scope.launch(Dispatchers.IO) {
-            val enriched = OfflineAi.addEmojis(base.trim())
+            val online = try { DeepSeekClient.addEmojis(base.trim()) } catch (_: Exception) { "" }
+            val enriched = if (online.isNotBlank()) online else OfflineAi.addEmojis(base.trim())
             withContext(Dispatchers.Main) {
                 val ic = currentInputConnection ?: return@withContext
                 try {
@@ -587,7 +588,8 @@ class VoiceInputMethodService : InputMethodService() {
         if (before.isBlank()) return
         statusView?.text = "اصلاح هوشمند…"
         scope.launch(Dispatchers.IO) {
-            val fixed = OfflineAi.correctText(this@VoiceInputMethodService, before)
+            val online = try { DeepSeekClient.correctText(before) } catch (_: Exception) { "" }
+            val fixed = if (online.isNotBlank()) online else OfflineAi.correctText(this@VoiceInputMethodService, before)
             withContext(Dispatchers.Main) {
                 val conn = currentInputConnection ?: return@withContext
                 if (fixed == before) {
