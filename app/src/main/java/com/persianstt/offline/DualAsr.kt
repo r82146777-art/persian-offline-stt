@@ -2,10 +2,12 @@ package com.persianstt.offline
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.runBlocking
 
 /**
- * Only offline neural AI speech model: Whisper (OpenAI architecture via sherpa-onnx).
- * No Vosk / Shenava path.
+ * Voice path connected to offline Qwen for final typing:
+ * audio → Whisper (hear) → Qwen (write final text into the field).
+ * User-facing engine name: Qwen.
  */
 object DualAsr {
     private const val TAG = "DualAsr"
@@ -23,28 +25,41 @@ object DualAsr {
         if (pcm.size < sampleRate / 8) return "" to "کوتاه"
 
         if (!WhisperEngine.isReady(context)) {
-            return "" to "مدل AI دانلود نشده"
+            return "" to "مدل شنیدار هنوز دانلود نشده"
         }
 
         val prepared = pad(AudioPreprocessor.prepare(pcm, 16000), 16000)
-        return try {
+        var heard = ""
+        try {
             if (!WhisperEngine.load(context, "fa")) {
-                return "" to WhisperEngine.lastError.ifBlank { "بارگذاری AI ناموفق" }
+                return "" to WhisperEngine.lastError.ifBlank { "بارگذاری شنیدار ناموفق" }
             }
-            var text = WhisperEngine.transcribe(prepared, 16000)
-            if (text.isBlank()) {
-                // retry with en then still fa load
+            heard = WhisperEngine.transcribe(prepared, 16000)
+            if (heard.isBlank()) {
                 WhisperEngine.load(context, "en")
-                text = WhisperEngine.transcribe(prepared, 16000)
+                heard = WhisperEngine.transcribe(prepared, 16000)
                 WhisperEngine.load(context, "fa")
             }
-            if (text.isBlank()) return "" to WhisperEngine.lastError.ifBlank { "بدون‌متن" }
-            // light phrase cleanup only
-            text = OfflineVoiceAi.improve(context, text)
-            text to "Whisper-AI"
         } catch (e: Exception) {
-            Log.e(TAG, "whisper", e)
-            "" to (e.message ?: "خطای AI")
+            Log.e(TAG, "hear", e)
+            return "" to (e.message ?: "خطای شنیدار")
         }
+
+        if (heard.isBlank()) return "" to "چیزی شنیده نشد"
+
+        // Qwen writes the final typed text
+        var typed = heard
+        try {
+            if (OfflineLlm.isReady(context)) {
+                val q = runBlocking { OfflineLlm.typeFromSpeech(context, heard) }
+                if (q.isNotBlank()) typed = q
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "qwen type", e)
+        }
+        // light phrase fix if Qwen skipped
+        typed = OfflineVoiceAi.improve(context, typed).ifBlank { typed }
+
+        return typed to "Qwen"
     }
 }

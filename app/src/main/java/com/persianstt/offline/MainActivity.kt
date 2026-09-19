@@ -186,7 +186,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 else -> "متن از قبل درست بود"
             }
             Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-            binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
+            binding.status.text = "آماده — تایپ با Qwen آفلاین"
         }
     }
 
@@ -216,7 +216,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 if (out != current) "ایموجی با هوش مصنوعی اضافه شد" else "ایموجی اضافه نشد",
                 Toast.LENGTH_SHORT
             ).show()
-            binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
+            binding.status.text = "آماده — تایپ با Qwen آفلاین"
         }
     }
 
@@ -283,12 +283,16 @@ override fun onCreate(savedInstanceState: Bundle?) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
                     try {
-                        WhisperEngine.load(this@MainActivity, "fa")
+                        WhisperEngine.load(this@MainActivity, "fa").also {
+                            if (OfflineLlm.isReady(this@MainActivity)) {
+                                try { kotlinx.coroutines.runBlocking { OfflineLlm.ensureLoaded(this@MainActivity) } } catch (_: Exception) {}
+                            }
+                        }
                     } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
+                        binding.status.text = "آماده — تایپ با Qwen آفلاین"
                         binding.micButton.isEnabled = true
                     } else {
                         binding.status.text = "خطا: ${(WhisperEngine.lastError.ifBlank { VoskEngine.lastError }).ifBlank { "بارگذاری ناموفق" }}"
@@ -300,7 +304,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور")
-            .setMessage("مدل هوش مصنوعی آفلاین Whisper (~۲۰۰ تا ۴۰۰ مگ) دانلود شود؟ بعد از دانلود بدون اینترنت تایپ صوتی می‌کند.")
+            .setMessage("برای تایپ با Qwen آفلاین: مدل شنیدار Whisper و مدل Qwen دانلود می‌شود (یک‌بار). بعد بدون اینترنت کار می‌کند.")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -356,11 +360,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
+                    binding.status.text = "آماده — تایپ با Qwen آفلاین"
                     binding.micButton.isEnabled = true
                     // download offline LLM package (Qwen) if missing
                     if (!OfflineLlm.isReady(this@MainActivity)) {
-                        binding.status.text = "دانلود LLM آفلاین Qwen (~۴۰۰ مگ)…"
+                        binding.status.text = "دانلود Qwen برای تایپ (~۴۰۰ مگ)…"
                         binding.progress.visibility = android.view.View.VISIBLE
                         binding.progress.isIndeterminate = false
                         val llmOk = withContext(Dispatchers.IO) {
@@ -377,10 +381,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
                             } catch (_: Exception) { false }
                         }
                         binding.progress.visibility = android.view.View.GONE
-                        binding.status.text = if (llmOk) "آماده — متصل به هوش مصنوعی آفلاین"
-                            else "Whisper آماده — LLM: ${OfflineLlm.lastError}"
+                        binding.status.text = if (llmOk) "آماده — تایپ با Qwen آفلاین"
+                            else "شنیدار آماده — Qwen: ${OfflineLlm.lastError}"
                     } else {
-                        binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
+                        binding.status.text = "آماده — تایپ با Qwen آفلاین"
                     }
                 } else if (WhisperEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
@@ -515,7 +519,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
+                        binding.status.text = "آماده — تایپ با Qwen آفلاین"
                     }
                 }, 3000)
             }

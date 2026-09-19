@@ -142,6 +142,29 @@ object OfflineLlm {
         }
     }
 
+    /** Write final text from rough speech transcript (more permissive than button-correct). */
+    suspend fun typeFromSpeech(context: Context, input: String): String {
+        if (input.isBlank()) return input
+        if (!ensureLoaded(context)) return input
+        val m = modelHandle ?: return input
+        return try {
+            withContext(Dispatchers.IO) {
+                val result = Llama.complete(
+                    m,
+                    prompt = "Write this Persian speech transcript as clean typed Persian. Only the final sentence:\n$input",
+                    systemPrompt = "You type clean Persian. Output only the typed text.",
+                    maxTokens = 160
+                )
+                val out = cleanOutput(result.text)
+                if (out.isNotBlank() && out.length >= input.length / 4) out else input
+            }
+        } catch (e: Exception) {
+            lastError = e.message ?: "خطای LLM"
+            Log.e(TAG, "typeFromSpeech", e)
+            input
+        }
+    }
+
     suspend fun correctText(context: Context, input: String): String {
         if (input.isBlank()) return input
         if (!ensureLoaded(context)) return ""
