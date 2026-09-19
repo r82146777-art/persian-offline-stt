@@ -300,8 +300,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور")
-            .setMessage("مدل هوش مصنوعی آفلاین Whisper (~۲۰۰–۴۰۰ مگ) دانلود شود؟
-بعد از دانلود بدون اینترنت تایپ صوتی می‌کند.")
+            .setMessage("مدل هوش مصنوعی آفلاین Whisper (~۲۰۰ تا ۴۰۰ مگ) دانلود شود؟ بعد از دانلود بدون اینترنت تایپ صوتی می‌کند.")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
