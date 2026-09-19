@@ -2,64 +2,46 @@ package com.persianstt.offline
 
 import android.content.Context
 import android.util.Log
-import kotlinx.coroutines.runBlocking
 
 /**
- * Voice path connected to offline Qwen for final typing:
- * audio → Whisper (hear) → Qwen (write final text into the field).
- * User-facing engine name: Qwen.
+ * Voice typing path: **Vosk only** (stable Persian offline engine).
+ * No Whisper / Qwen in the recognition path.
  */
 object DualAsr {
     private const val TAG = "DualAsr"
 
-    fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
-        val pre = sampleRate / 5
-        val post = sampleRate / 2
-        val out = ShortArray(pre + pcm.size + post)
-        System.arraycopy(pcm, 0, out, pre, pcm.size)
-        return out
-    }
-
-    fun transcribe(context: Context, pcm: ShortArray, sampleRate: Int = 16000): Pair<String, String> {
-        if (pcm.isEmpty()) return "" to "خالی"
-        if (pcm.size < sampleRate / 8) return "" to "کوتاه"
-
-        if (!WhisperEngine.isReady(context)) {
-            return "" to "مدل شنیدار هنوز دانلود نشده"
+    fun transcribe(context: Context, pcm16: ShortArray, sampleRate: Int): Pair<String, String> {
+        if (pcm16.isEmpty() || pcm16.size < sampleRate / 10) {
+            return "" to "empty"
         }
-
-        val prepared = pad(AudioPreprocessor.prepare(pcm, 16000), 16000)
-        var heard = ""
-        try {
-            if (!WhisperEngine.load(context, "fa")) {
-                return "" to WhisperEngine.lastError.ifBlank { "بارگذاری شنیدار ناموفق" }
+        return try {
+            if (!VoskEngine.isReady(context)) {
+                VoskEngine.ensureModel(context) {}
             }
-            heard = WhisperEngine.transcribe(prepared, 16000)
-            if (heard.isBlank()) {
-                WhisperEngine.load(context, "en")
-                heard = WhisperEngine.transcribe(prepared, 16000)
-                WhisperEngine.load(context, "fa")
+            if (!VoskEngine.isReady(context)) {
+                return "" to "no-model"
             }
+            VoskEngine.load(context)
+            var text = VoskEngine.transcribe(pcm16, sampleRate).trim()
+            if (text.isBlank()) return "" to "Vosk"
+            // light offline post-process only (no cloud, no heavy LLM rewrite)
+            try {
+                text = NumberNormalizer.normalize(text)
+            } catch (_: Exception) {}
+            try {
+                text = PersianPostProcess.fix(text)
+            } catch (_: Exception) {}
+            try {
+                val improved = OfflineVoiceAi.improve(context, text)
+                if (improved.isNotBlank()) text = improved
+            } catch (_: Exception) {}
+            text to "Vosk"
+        } catch (e: OutOfMemoryError) {
+            Log.e(TAG, "OOM", e)
+            "" to "oom"
         } catch (e: Exception) {
-            Log.e(TAG, "hear", e)
-            return "" to (e.message ?: "خطای شنیدار")
+            Log.e(TAG, "transcribe", e)
+            "" to "err"
         }
-
-        if (heard.isBlank()) return "" to "چیزی شنیده نشد"
-
-        // Qwen writes the final typed text
-        var typed = heard
-        try {
-            if (OfflineLlm.isReady(context)) {
-                val q = runBlocking { OfflineLlm.typeFromSpeech(context, heard) }
-                if (q.isNotBlank()) typed = q
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "qwen type", e)
-        }
-        // light phrase fix if Qwen skipped
-        typed = OfflineVoiceAi.improve(context, typed).ifBlank { typed }
-
-        return typed to "Qwen"
     }
 }

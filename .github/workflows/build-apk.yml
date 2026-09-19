@@ -36,11 +36,8 @@ jobs:
         run: |
           mkdir -p app/libs
           curl -L --fail -o app/libs/sherpa-onnx.aar \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar"
-          ls -lh app/libs/
-
-      - name: Apply v3.34 UI patches
-        run: python3 scripts/apply_v334_patches.py
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar" || true
+          ls -lh app/libs/ || true
 
       - name: Generate wrapper and build debug APK
         run: |
@@ -57,15 +54,16 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.34.0
-          name: "v3.34.0 - Samsung-like keyboard + auto-stop + vibe/sound settings"
+          tag_name: v4.0.0
+          name: "v4.0.0 - Vosk پایدار + کیبورد + تنظیمات + ایموجی"
           body: |
-            ## نسخه ۳.۳۴.۰
-            * کیبورد آفلاین با کلیدهای گرد شبیه سامسونگ
-            * افکت صدا (چند مدل) + بلندی + شدت ویبره در تنظیمات
-            * میکروفون مثل گوگل: بوق شروع + توقف خودکار با سکوت
-            * دیالوگ دانلود موتور در اولین ورود (دانلود / لغو)
-            * اصلاح خودکار و AI آفلاین
+            ## نسخه ۴.۰.۰
+            * موتور تشخیص: **Vosk آفلاین** (همان موتور پایدار نسخه ۱.۲)
+            * کیبورد سیستم آفلاین (حروف، اعداد، علائم، میکروفون)
+            * تنظیمات صدا و ویبره (چند افکت + شدت)
+            * افزودن ایموجی آفلاین
+            * توقف خودکار با سکوت + بوق شروع
+            * منو: راهنما، درباره ما، کانال آکادمی همدل
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
