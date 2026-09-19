@@ -166,24 +166,25 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.status.text = "اصلاح…"
+        if (!OfflineLlm.isReady(this)) {
+            Toast.makeText(this, "مدل هوش مصنوعی دانلود نشده — اول مدل Qwen را دانلود کنید", Toast.LENGTH_LONG).show()
+            return
+        }
+        binding.status.text = "هوش مصنوعی آفلاین در حال اصلاح…"
         lifecycleScope.launch {
-            val fixed = withContext(Dispatchers.IO) {
-                val local = OfflineVoiceAi.improve(this@MainActivity, current)
-                    .ifBlank { OfflineAi.correctText(this@MainActivity, current) }
-                    .ifBlank { current }
-                local
-            }
+            val fixed = OfflineLlm.correctText(this@MainActivity, current)
             if (isFinishing || isDestroyed) return@launch
-            finalText.clear(); finalText.append(fixed)
-            binding.resultText.setText(fixed)
-            binding.resultText.setSelection(fixed.length)
-            Toast.makeText(
-                this@MainActivity,
-                if (fixed != current) "اصلاح شد" else "تغییری لازم نبود",
-                Toast.LENGTH_SHORT
-            ).show()
-            binding.status.text = "آماده"
+            val out = fixed.ifBlank { current }
+            finalText.clear(); finalText.append(out)
+            binding.resultText.setText(out)
+            binding.resultText.setSelection(out.length)
+            val msg = when {
+                fixed.isBlank() -> "هوش مصنوعی پاسخ نداد — ${OfflineLlm.lastError}"
+                fixed != current -> "اصلاح شد با هوش مصنوعی آفلاین"
+                else -> "متن از قبل درست بود"
+            }
+            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+            binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
         }
     }
 
@@ -193,15 +194,28 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        val enriched = OfflineAi.addEmojis(current)
-        finalText.clear(); finalText.append(enriched)
-        binding.resultText.setText(enriched)
-        binding.resultText.setSelection(enriched.length)
-        Toast.makeText(
-            this,
-            if (enriched != current) "ایموجی اضافه شد" else "ایموجی‌ای پیدا نشد",
-            Toast.LENGTH_SHORT
-        ).show()
+        if (!OfflineLlm.isReady(this)) {
+            // fallback rules only if AI package missing
+            val e = OfflineAi.addEmojis(current)
+            binding.resultText.setText(e)
+            Toast.makeText(this, "مدل AI نیست — ایموجی ساده", Toast.LENGTH_SHORT).show()
+            return
+        }
+        binding.status.text = "هوش مصنوعی: افزودن ایموجی…"
+        lifecycleScope.launch {
+            var out = OfflineLlm.addEmojis(this@MainActivity, current)
+            if (out.isBlank()) out = OfflineAi.addEmojis(current)
+            if (isFinishing || isDestroyed) return@launch
+            finalText.clear(); finalText.append(out)
+            binding.resultText.setText(out)
+            binding.resultText.setSelection(out.length)
+            Toast.makeText(
+                this@MainActivity,
+                if (out != current) "ایموجی با هوش مصنوعی اضافه شد" else "ایموجی اضافه نشد",
+                Toast.LENGTH_SHORT
+            ).show()
+            binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
+        }
     }
 
     private fun showSoundSettings() {
@@ -275,7 +289,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 if (!isFinishing && !isDestroyed) {
                     if (ok) {
-                        binding.status.text = "آماده — Shenava + Qwen آفلاین"
+                        binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
                         binding.micButton.isEnabled = true
                     } else {
                         binding.status.text = "خطا: ${(ShenavaEngine.lastError.ifBlank { VoskEngine.lastError }).ifBlank { "بارگذاری ناموفق" }}"
@@ -343,7 +357,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
                 if (ok) {
-                    binding.status.text = "آماده — Shenava"
+                    binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
                     binding.micButton.isEnabled = true
                     // download offline LLM package (Qwen) if missing
                     if (!OfflineLlm.isReady(this@MainActivity)) {
@@ -364,10 +378,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
                             } catch (_: Exception) { false }
                         }
                         binding.progress.visibility = android.view.View.GONE
-                        binding.status.text = if (llmOk) "آماده — Shenava + Qwen آفلاین"
+                        binding.status.text = if (llmOk) "آماده — متصل به هوش مصنوعی آفلاین"
                             else "Shenava آماده — LLM: ${OfflineLlm.lastError}"
                     } else {
-                        binding.status.text = "آماده — Shenava + Qwen آفلاین"
+                        binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
                     }
                 } else if (ShenavaEngine.isReady(this@MainActivity) || VoskEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
@@ -502,7 +516,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 binding.micButton.postDelayed({
                     if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — Shenava + Qwen آفلاین"
+                        binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
                     }
                 }, 3000)
             }

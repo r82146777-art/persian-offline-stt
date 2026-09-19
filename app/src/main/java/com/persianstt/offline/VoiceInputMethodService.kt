@@ -559,7 +559,11 @@ class VoiceInputMethodService : InputMethodService() {
         }
         statusView?.text = "ایموجی هوشمند…"
         scope.launch(Dispatchers.IO) {
-            val enriched = OfflineAi.addEmojis(base.trim())
+            val enriched = try {
+                kotlinx.coroutines.runBlocking {
+                    OfflineLlm.addEmojis(this@VoiceInputMethodService, base.trim())
+                }
+            } catch (_: Exception) { "" }.ifBlank { OfflineAi.addEmojis(base.trim()) }
             withContext(Dispatchers.Main) {
                 val ic = currentInputConnection ?: return@withContext
                 try {
@@ -587,8 +591,12 @@ class VoiceInputMethodService : InputMethodService() {
         if (before.isBlank()) return
         statusView?.text = "اصلاح هوشمند…"
         scope.launch(Dispatchers.IO) {
-            val fixed = OfflineVoiceAi.improve(this@VoiceInputMethodService, before).ifBlank {
-                OfflineAi.correctText(this@VoiceInputMethodService, before)
+            val fixed = try {
+                kotlinx.coroutines.runBlocking {
+                    OfflineLlm.correctText(this@VoiceInputMethodService, before)
+                }
+            } catch (_: Exception) { "" }.ifBlank {
+                OfflineVoiceAi.improve(this@VoiceInputMethodService, before)
             }.ifBlank { before }
             withContext(Dispatchers.Main) {
                 val conn = currentInputConnection ?: return@withContext

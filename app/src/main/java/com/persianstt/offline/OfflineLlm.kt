@@ -16,13 +16,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Real offline LLM package: llama.cpp (Maven AAR) + Qwen2.5-0.5B-Instruct GGUF.
- * Used for text correction and emoji — not hand-written rules.
+ * Offline AI connection: llama.cpp + Qwen2.5-0.5B-Instruct GGUF.
+ * Used for text fix + emoji after (or with) ASR.
  */
 object OfflineLlm {
     private const val TAG = "OfflineLlm"
     private const val MODEL_NAME = "qwen2.5-0.5b-instruct-q4_0.gguf"
-    // Hugging Face direct + mirror
     private val URLS = listOf(
         "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_0.gguf",
         "https://hf-mirror.com/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_0.gguf"
@@ -67,7 +66,7 @@ object OfflineLlm {
                 Log.e(TAG, "download fail $url", e)
             }
         }
-        lastError = lastEx?.message ?: "دانلود مدل LLM ناموفق"
+        lastError = lastEx?.message ?: "دانلود مدل هوش مصنوعی ناموفق"
         throw IllegalStateException(lastError)
     }
 
@@ -116,15 +115,14 @@ object OfflineLlm {
     suspend fun ensureLoaded(context: Context): Boolean = mutex.withLock {
         if (modelHandle != null) return true
         if (!isReady(context)) {
-            lastError = "مدل LLM دانلود نشده"
+            lastError = "مدل هوش مصنوعی دانلود نشده — یک‌بار با اینترنت دانلود کنید"
             return false
         }
         return try {
             withContext(Dispatchers.IO) {
                 System.gc()
-                val path = modelFile(context).absolutePath
                 modelHandle = Llama.loadModel(
-                    modelPath = path,
+                    modelPath = modelFile(context).absolutePath,
                     config = LlamaConfig(contextSize = 1024, threads = 2)
                 )
             }
@@ -132,20 +130,19 @@ object OfflineLlm {
             true
         } catch (oom: OutOfMemoryError) {
             modelHandle = null
-            lastError = "حافظه کم برای LLM — برنامه‌ها را ببندید"
+            lastError = "حافظه کم برای هوش مصنوعی"
             Log.e(TAG, "OOM", oom)
             System.gc()
             false
         } catch (e: Throwable) {
             modelHandle = null
-            lastError = e.message ?: "بارگذاری LLM ناموفق"
+            lastError = e.message ?: "بارگذاری هوش مصنوعی ناموفق"
             Log.e(TAG, "load", e)
             false
         }
     }
 
     suspend fun correctText(context: Context, input: String): String {
-        // Small Qwen often ruins Persian — validate strictly
         if (input.isBlank()) return input
         if (!ensureLoaded(context)) return ""
         val m = modelHandle ?: return ""
@@ -153,41 +150,75 @@ object OfflineLlm {
             withContext(Dispatchers.IO) {
                 val result = Llama.complete(
                     m,
-                    prompt = "Correct Persian spelling only. Return ONLY the corrected text:\n$input",
-                    systemPrompt = "Output only the final Persian text.",
-                    maxTokens = 128
+                    prompt =
+                        "User text (Persian). Fix only spelling and spacing. " +
+                        "If already correct, repeat it exactly. Reply with ONLY the Persian text, no English:\n" +
+                        input,
+                    systemPrompt =
+                        "You fix Persian text. Output only the corrected Persian sentence. " +
+                        "No explanation. No quotes. No English.",
+                    maxTokens = 180
                 )
-                val out = cleanOutput(result.text)
-                if (isSafeCorrection(input, out)) out else ""
+                val out = strip(result.text)
+                if (out.isBlank()) "" else out
             }
         } catch (e: Exception) {
-            lastError = e.message ?: "خطای LLM"
+            lastError = e.message ?: "خطای هوش مصنوعی"
             Log.e(TAG, "correct", e)
             ""
         }
     }
 
-    /** Small LLM rewrites text — emoji must use OfflineAi rules, not this. */
-    suspend fun addEmojis(context: Context, input: String): String = ""
-
-    private fun isSafeCorrection(original: String, candidate: String): Boolean {
-        if (candidate.isBlank()) return false
-        if (candidate == original) return true
-        val low = candidate.lowercase()
-        if ("correct" in low || "spelling" in low || "output" in low) return false
-        if (candidate.length > original.length * 2) return false
-        if (candidate.length < original.length / 3) return false
-        val o = original.replace(" ", "").toSet()
-        val c = candidate.replace(" ", "").toSet()
-        if (o.isNotEmpty() && o.intersect(c).size * 2 < o.size) return false
-        return true
+    suspend fun addEmojis(context: Context, input: String): String {
+        if (input.isBlank()) return input
+        if (!ensureLoaded(context)) return ""
+        val m = modelHandle ?: return ""
+        return try {
+            withContext(Dispatchers.IO) {
+                val result = Llama.complete(
+                    m,
+                    prompt =
+                        "Add 1 or 2 suitable emojis to this Persian text. " +
+                        "Keep every Persian word the same. Only insert emojis. " +
+                        "Reply with ONLY the final text:\n" + input,
+                    systemPrompt =
+                        "You only insert emojis into Persian text. Do not rewrite words. " +
+                        "Output only the final text with emojis.",
+                    maxTokens = 180
+                )
+                val out = strip(result.text)
+                // must still look like the input (contain most of original words)
+                if (out.isBlank()) return@withContext ""
+                if (!keepsWords(input, out)) return@withContext ""
+                // prefer if has emoji-like chars
+                out
+            }
+        } catch (e: Exception) {
+            lastError = e.message ?: "خطای هوش مصنوعی"
+            Log.e(TAG, "emoji", e)
+            ""
+        }
     }
 
-    private fun cleanOutput(raw: String): String {
+    private fun keepsWords(original: String, candidate: String): Boolean {
+        val oWords = original.split(Regex("\\s+")).filter { it.length > 1 }
+        if (oWords.isEmpty()) return true
+        val hit = oWords.count { candidate.contains(it) }
+        return hit * 2 >= oWords.size
+    }
+
+    private fun strip(raw: String): String {
         var t = raw.trim().removePrefix("```").removeSuffix("```").trim()
-        t = t.replace(Regex("^(متن اصلاح[‌ ]*شده[:：]?\\s*|خروجی[:：]?\\s*|نتیجه[:：]?\\s*|Corrected[:：]?\\s*)"), "")
+        t = t.replace(
+            Regex(
+                "^(متن اصلاح[‌ ]*شده[:：]?\\s*|خروجی[:：]?\\s*|نتیجه[:：]?\\s*|" +
+                    "Corrected[:：]?\\s*|Here[:：]?\\s*)",
+                RegexOption.IGNORE_CASE
+            ),
+            ""
+        )
         t = t.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: t
-        return t
+        return t.trim()
     }
 
     fun release() {

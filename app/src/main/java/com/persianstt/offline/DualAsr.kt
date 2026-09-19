@@ -62,8 +62,18 @@ object DualAsr {
 
         if (text.isBlank()) return "" to err.ifBlank { "بدون‌متن" }
 
-        // light known-phrase fix only (not a fake "AI")
         text = OfflineVoiceAi.improve(context, text)
-        return text to engine
+        // connect to offline AI (Qwen) when model is on device
+        if (OfflineLlm.isReady(context)) {
+            try {
+                val ai = kotlinx.coroutines.runBlocking {
+                    OfflineLlm.correctText(context, text)
+                }
+                if (ai.isNotBlank()) text = ai
+            } catch (e: Exception) {
+                Log.w(TAG, "llm post", e)
+            }
+        }
+        return text to (if (OfflineLlm.isReady(context)) "$engine+AI" else engine)
     }
 }
