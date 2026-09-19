@@ -155,7 +155,7 @@ object OfflineLlm {
                     systemPrompt = "You type clean Persian. Output only the typed text.",
                     maxTokens = 160
                 )
-                val out = cleanOutput(result.text)
+                val out = strip(result.text)
                 if (out.isNotBlank() && out.length >= input.length / 4) out else input
             }
         } catch (e: Exception) {
