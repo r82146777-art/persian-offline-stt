@@ -9,13 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "com.persianstt.offline"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 35
-        versionCode = 80
-        versionName = "3.33.0"
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
+        versionCode = 81
+        versionName = "3.34.0"
     }
 
     buildTypes {
@@ -49,6 +46,11 @@ android {
             useLegacyPackaging = true
         }
     }
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("libs")
+        }
+    }
 }
 
 dependencies {
@@ -64,9 +66,6 @@ dependencies {
     }
     implementation("net.java.dev.jna:jna:5.14.0@aar")
 
-    implementation(files("libs/sherpa-onnx.aar"))
-    implementation("org.apache.commons:commons-compress:1.26.2")
-
-    // Real offline LLM package (llama.cpp) + download Qwen2.5-0.5B GGUF
-    implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
+    // sherpa-onnx (optional engines) — AAR downloaded in CI
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 }

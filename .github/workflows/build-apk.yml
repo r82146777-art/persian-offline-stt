@@ -27,12 +27,10 @@ jobs:
       - name: Accept Android licenses & local.properties
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null 2>&1 || true
-          # fallback path on some images
           if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
             yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null 2>&1 || true
           fi
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "ANDROID_HOME=$ANDROID_HOME"
 
       - name: Download sherpa-onnx AAR
         run: |
@@ -56,13 +54,17 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.33.0
-          name: "v3.33.0 - Whisper tiny + no load on start (fix 88% crash)"
+          tag_name: v3.34.0
+          name: "v3.34.0 - Samsung-like keyboard + auto-stop + vibe/sound settings"
           body: |
-            ## نسخه ۳.۱۶.۰
-            * موتور تشخیص: Vosk آفلاین
-            * اصلاح متن و ایموجی هوشمند با API (کلید مبهم‌سازی‌شده)
-            * در نبود اینترنت، اصلاح محلی
+            ## نسخه ۳.۳۴.۰
+            * کیبورد آفلاین با کلیدهای گرد شبیه سامسونگ
+            * افکت صدا (چند مدل) + بلندی + شدت ویبره در تنظیمات
+            * میکروفون مثل گوگل: بوق شروع + توقف خودکار با سکوت
+            * دیالوگ دانلود موتور در اولین ورود (دانلود / لغو)
+            * اصلاح خودکار و AI آفلاین
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
