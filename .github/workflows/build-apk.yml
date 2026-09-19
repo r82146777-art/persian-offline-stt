@@ -39,6 +39,9 @@ jobs:
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar"
           ls -lh app/libs/
 
+      - name: Apply v3.34 UI patches
+        run: python3 scripts/apply_v334_patches.py
+
       - name: Generate wrapper and build debug APK
         run: |
           gradle wrapper --gradle-version 8.9
