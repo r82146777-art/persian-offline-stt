@@ -4,16 +4,15 @@ import android.content.Context
 import android.util.Log
 
 /**
- * Primary: Shenava (real offline Persian ASR model, sherpa-onnx) — not hand-built rules.
- * Fallback: Vosk small-fa if Shenava missing/OOM.
- * Light phrase cleanup after either engine.
+ * Only offline neural AI speech model: Whisper (OpenAI architecture via sherpa-onnx).
+ * No Vosk / Shenava path.
  */
 object DualAsr {
     private const val TAG = "DualAsr"
 
     fun pad(pcm: ShortArray, sampleRate: Int = 16000): ShortArray {
         val pre = sampleRate / 5
-        val post = sampleRate
+        val post = sampleRate / 2
         val out = ShortArray(pre + pcm.size + post)
         System.arraycopy(pcm, 0, out, pre, pcm.size)
         return out
@@ -23,57 +22,29 @@ object DualAsr {
         if (pcm.isEmpty()) return "" to "خالی"
         if (pcm.size < sampleRate / 8) return "" to "کوتاه"
 
+        if (!WhisperEngine.isReady(context)) {
+            return "" to "مدل AI دانلود نشده"
+        }
+
         val prepared = pad(AudioPreprocessor.prepare(pcm, 16000), 16000)
-        var text = ""
-        var engine = "none"
-        var err = ""
-
-        // 1) Real offline AI model: Shenava Persian
-        try {
-            if (ShenavaEngine.isReady(context)) {
-                if (ShenavaEngine.load(context)) {
-                    text = ShenavaEngine.transcribe(prepared, 16000)
-                    if (text.isNotBlank()) engine = "Shenava"
-                    else err = ShenavaEngine.lastError.ifBlank { "خروجی خالی" }
-                } else {
-                    err = ShenavaEngine.lastError.ifBlank { "بارگذاری Shenava ناموفق" }
-                }
+        return try {
+            if (!WhisperEngine.load(context, "fa")) {
+                return "" to WhisperEngine.lastError.ifBlank { "بارگذاری AI ناموفق" }
             }
+            var text = WhisperEngine.transcribe(prepared, 16000)
+            if (text.isBlank()) {
+                // retry with en then still fa load
+                WhisperEngine.load(context, "en")
+                text = WhisperEngine.transcribe(prepared, 16000)
+                WhisperEngine.load(context, "fa")
+            }
+            if (text.isBlank()) return "" to WhisperEngine.lastError.ifBlank { "بدون‌متن" }
+            // light phrase cleanup only
+            text = OfflineVoiceAi.improve(context, text)
+            text to "Whisper-AI"
         } catch (e: Exception) {
-            Log.e(TAG, "shenava", e)
-            err = e.message ?: "خطای Shenava"
+            Log.e(TAG, "whisper", e)
+            "" to (e.message ?: "خطای AI")
         }
-
-        // 2) Fallback Vosk
-        if (text.isBlank()) {
-            try {
-                if (VoskEngine.isReady(context) && VoskEngine.load(context)) {
-                    text = VoskEngine.transcribe(prepared, 16000)
-                    if (text.isNotBlank()) engine = "Vosk"
-                    else if (err.isBlank()) err = VoskEngine.lastError.ifBlank { "بدون‌متن" }
-                } else if (err.isBlank()) {
-                    err = VoskEngine.lastError.ifBlank { "مدل نیست" }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "vosk", e)
-                if (err.isBlank()) err = e.message ?: "خطای Vosk"
-            }
-        }
-
-        if (text.isBlank()) return "" to err.ifBlank { "بدون‌متن" }
-
-        text = OfflineVoiceAi.improve(context, text)
-        // connect to offline AI (Qwen) when model is on device
-        if (OfflineLlm.isReady(context)) {
-            try {
-                val ai = kotlinx.coroutines.runBlocking {
-                    OfflineLlm.correctText(context, text)
-                }
-                if (ai.isNotBlank()) text = ai
-            } catch (e: Exception) {
-                Log.w(TAG, "llm post", e)
-            }
-        }
-        return text to (if (OfflineLlm.isReady(context)) "$engine+AI" else engine)
     }
 }

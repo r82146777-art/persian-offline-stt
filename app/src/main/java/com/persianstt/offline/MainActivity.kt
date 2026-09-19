@@ -75,7 +75,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
             }
         }
         binding.copyButton.setOnClickListener { copyText() }
-        binding.editButton.setOnClickListener { showEditTextDialog() }
+        binding.editButton.visibility = android.view.View.GONE
+        // اصلاح متن حذف شد — فقط ایموجی با AI آفلاین
+        // binding.editButton.setOnClickListener { showEditTextDialog() }
         binding.emojiButton.setOnClickListener { applyEmojis() }
         binding.clearButton.setOnClickListener {
             finalText.clear()
@@ -277,14 +279,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
     private fun prepareModel() {
-        if (ShenavaEngine.isReady(this) || VoskEngine.isReady(this)) {
+        if (WhisperEngine.isReady(this)) {
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
                     try {
-                        when {
-                            ShenavaEngine.isReady(this@MainActivity) -> ShenavaEngine.load(this@MainActivity)
-                            else -> VoskEngine.load(this@MainActivity)
-                        }
+                        WhisperEngine.load(this@MainActivity, "fa")
                     } catch (_: Throwable) { false }
                 }
                 if (!isFinishing && !isDestroyed) {
@@ -292,7 +291,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                         binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
                         binding.micButton.isEnabled = true
                     } else {
-                        binding.status.text = "خطا: ${(ShenavaEngine.lastError.ifBlank { VoskEngine.lastError }).ifBlank { "بارگذاری ناموفق" }}"
+                        binding.status.text = "خطا: ${(WhisperEngine.lastError.ifBlank { VoskEngine.lastError }).ifBlank { "بارگذاری ناموفق" }}"
                         binding.micButton.isEnabled = false
                     }
                 }
@@ -301,7 +300,8 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("دانلود موتور")
-            .setMessage("موتور آفلاین فارسی Shenava (~۱۰۰ مگ) دانلود شود؟\n(مدل آماده، نه ساخت دستی)")
+            .setMessage("مدل هوش مصنوعی آفلاین Whisper (~۲۰۰–۴۰۰ مگ) دانلود شود؟
+بعد از دانلود بدون اینترنت تایپ صوتی می‌کند.")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -319,13 +319,13 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.progress.visibility = android.view.View.VISIBLE
                 binding.status.text = "دانلود…"
                 withContext(Dispatchers.IO) {
-                    try { ShenavaEngine.release() } catch (_: Throwable) {}
+                    try { WhisperEngine.release() } catch (_: Throwable) {}
                     try { VoskEngine.release() } catch (_: Throwable) {}
                     try { VoskEngine.release() } catch (_: Throwable) {}
                     try { Qwen3Engine.release() } catch (_: Throwable) {}
                     try { VoskEngine.release() } catch (_: Throwable) {}
                     System.gc()
-                    ShenavaEngine.ensureModel(this@MainActivity) { pct ->
+                    WhisperEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
@@ -345,9 +345,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 val ok = withContext(Dispatchers.IO) {
                     try {
                         System.gc()
-                        ShenavaEngine.load(this@MainActivity)
+                        WhisperEngine.load(this@MainActivity, "fa")
                     } catch (_: OutOfMemoryError) {
-                        ShenavaEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
+                        WhisperEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
                         false
                     } catch (_: Throwable) {
                         false
@@ -370,7 +370,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                                     runOnUiThread {
                                         if (!isFinishing && !isDestroyed) {
                                             binding.progress.progress = pct
-                                            binding.status.text = "دانلود Qwen $pct٪"
+                                            binding.status.text = "دانلود $pct٪"
                                         }
                                     }
                                 }
@@ -379,15 +379,15 @@ override fun onCreate(savedInstanceState: Bundle?) {
                         }
                         binding.progress.visibility = android.view.View.GONE
                         binding.status.text = if (llmOk) "آماده — متصل به هوش مصنوعی آفلاین"
-                            else "Shenava آماده — LLM: ${OfflineLlm.lastError}"
+                            else "Whisper آماده — LLM: ${OfflineLlm.lastError}"
                     } else {
                         binding.status.text = "آماده — متصل به هوش مصنوعی آفلاین"
                     }
-                } else if (ShenavaEngine.isReady(this@MainActivity) || VoskEngine.isReady(this@MainActivity)) {
+                } else if (WhisperEngine.isReady(this@MainActivity)) {
                     binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
                     binding.micButton.isEnabled = false
                 } else {
-                    binding.status.text = "خطا: ${ShenavaEngine.lastError.ifBlank { VoskEngine.lastError }}"
+                    binding.status.text = "خطا: ${WhisperEngine.lastError.ifBlank { VoskEngine.lastError }}"
                     binding.micButton.isEnabled = false
                 }
             } catch (e: OutOfMemoryError) {
@@ -406,7 +406,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
     private fun startListening() {
         if (isFinishing || isDestroyed) return
-        if (!ShenavaEngine.isReady(this) && !VoskEngine.isReady(this)) {
+        if (!WhisperEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
