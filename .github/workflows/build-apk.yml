@@ -39,6 +39,9 @@ jobs:
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar" || true
           ls -lh app/libs/ || true
 
+      - name: Apply Vosk-only MainActivity patch
+        run: python3 scripts/apply_v4_vosk.py
+
       - name: Generate wrapper and build debug APK
         run: |
           gradle wrapper --gradle-version 8.9
@@ -59,11 +62,11 @@ jobs:
           body: |
             ## نسخه ۴.۰.۰
             * موتور تشخیص: **Vosk آفلاین** (همان موتور پایدار نسخه ۱.۲)
-            * کیبورد سیستم آفلاین (حروف، اعداد، علائم، میکروفون)
-            * تنظیمات صدا و ویبره (چند افکت + شدت)
+            * کیبورد سیستم آفلاین
+            * تنظیمات صدا و ویبره
             * افزودن ایموجی آفلاین
-            * توقف خودکار با سکوت + بوق شروع
-            * منو: راهنما، درباره ما، کانال آکادمی همدل
+            * توقف خودکار با سکوت
+            * منو: راهنما، درباره ما، کانال
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
