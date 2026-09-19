@@ -16,18 +16,17 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Whisper small int8 — downloaded from GitHub (not HuggingFace)
- * so it works in regions where HF is blocked.
- * Language forced to fa/en.
+ * Whisper **tiny** int8 — lighter than small, less OOM on mid-range phones.
+ * Progress: 0–85 download, 86–99 extract (with live updates), 100 ready.
+ * load() is lazy — never call on app start.
  */
 object WhisperEngine {
 
     private const val TAG = "WhisperEngine"
-    private const val FOLDER = "whisper-small"
-    // GitHub release package (same CDN as Shenava)
+    private const val FOLDER = "whisper-tiny"
     private const val TAR_URL =
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/" +
-            "sherpa-onnx-whisper-small.tar.bz2"
+            "sherpa-onnx-whisper-tiny.tar.bz2"
 
     @Volatile private var recognizer: OfflineRecognizer? = null
     @Volatile private var loadedLang: String = ""
@@ -54,11 +53,19 @@ object WhisperEngine {
 
     fun isReady(context: Context): Boolean {
         val dir = modelDir(context)
-        val enc = findFile(dir, "small-encoder.int8.onnx", "small-encoder.onnx")
-        val dec = findFile(dir, "small-decoder.int8.onnx", "small-decoder.onnx")
-        val tok = findFile(dir, "small-tokens.txt", "tokens.txt")
+        val enc = findFile(
+            dir,
+            "tiny-encoder.int8.onnx", "tiny-encoder.onnx",
+            "small-encoder.int8.onnx", "small-encoder.onnx" // leftover small ok
+        )
+        val dec = findFile(
+            dir,
+            "tiny-decoder.int8.onnx", "tiny-decoder.onnx",
+            "small-decoder.int8.onnx", "small-decoder.onnx"
+        )
+        val tok = findFile(dir, "tiny-tokens.txt", "small-tokens.txt", "tokens.txt")
         return enc != null && dec != null && tok != null &&
-            enc.length() > 1_000_000 && dec.length() > 1_000_000
+            enc.length() > 500_000 && dec.length() > 500_000
     }
 
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
@@ -66,16 +73,26 @@ object WhisperEngine {
             onProgress(100)
             return
         }
-        // remove old base / partial
         try {
+            // clear other whisper folders to free space
             File(context.applicationContext.filesDir, "whisper-models").listFiles()?.forEach {
-                if (it.name != FOLDER) it.deleteRecursively()
+                if (it.name != FOLDER) {
+                    try { it.deleteRecursively() } catch (_: Exception) {}
+                }
             }
+            System.gc()
         } catch (_: Exception) {}
 
         val dir = modelDir(context)
         if (!dir.exists()) dir.mkdirs()
-        val tarFile = File(dir, "whisper-small.tar.bz2")
+        // clear partial extract
+        dir.listFiles()?.forEach { f ->
+            if (f.name.endsWith(".onnx") || f.name.endsWith(".txt")) {
+                try { f.delete() } catch (_: Exception) {}
+            }
+        }
+
+        val tarFile = File(dir, "whisper-tiny.tar.bz2")
         try {
             downloadResumable(TAR_URL, tarFile) { pct -> onProgress((pct * 85) / 100) }
             onProgress(86)
@@ -83,21 +100,28 @@ object WhisperEngine {
                 lastError = "فایل دانلود ناقص است"
                 throw IllegalStateException(lastError)
             }
-            onProgress(88)
-            extractTarBz2(tarFile, dir)
-            onProgress(94)
+            onProgress(87)
+            extractTarBz2(tarFile, dir) { extractPct ->
+                // map extract 0..100 → 87..99
+                onProgress(87 + (extractPct * 12) / 100)
+            }
+            onProgress(97)
             try { tarFile.delete() } catch (_: Exception) {}
-            onProgress(96)
-            flatten(dir)
+            System.gc()
             onProgress(98)
+            flatten(dir)
+            onProgress(99)
             if (!isReady(context)) {
-                // list what we got for debug
                 val names = dir.listFiles()?.joinToString { it.name } ?: "empty"
                 lastError = "استخراج ناقص: $names"
                 throw IllegalStateException(lastError)
             }
             onProgress(100)
             lastError = ""
+        } catch (e: OutOfMemoryError) {
+            lastError = "حافظه کم هنگام استخراج — برنامه‌ها را ببندید و دوباره دانلود کنید"
+            System.gc()
+            throw IllegalStateException(lastError)
         } catch (e: java.net.UnknownHostException) {
             lastError = "اینترنت یا DNS قطع است (github.com)"
             throw e
@@ -134,28 +158,30 @@ object WhisperEngine {
         val code = conn.responseCode
         if (code == 200 && existing > 0) {
             existing = 0
-            tmp.delete()
+            try { tmp.delete() } catch (_: Exception) {}
         }
-        if (code !in 200..299) {
-            throw IllegalStateException("دانلود ناموفق: HTTP $code")
+        if (code !in 200..299 && code != 206) {
+            throw IllegalStateException("HTTP $code")
         }
-        val totalFromHeader = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
-        val total = if (code == 206 && totalFromHeader > 0) existing + totalFromHeader
-        else if (totalFromHeader > 0) totalFromHeader
-        else -1L
-        val input = BufferedInputStream(conn.inputStream, 64 * 1024)
+        val totalHdr = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
+        val total = when {
+            code == 206 && totalHdr > 0 -> existing + totalHdr
+            totalHdr > 0 -> totalHdr
+            else -> -1L
+        }
+        val input = BufferedInputStream(conn.inputStream, 256 * 1024)
         val out = if (existing > 0 && code == 206) FileOutputStream(tmp, true) else FileOutputStream(tmp, false)
-        var done = existing
-        var lastPct = -1
-        val buf = ByteArray(128 * 1024)
         try {
+            var done = existing
+            var lastPct = -1
+            val buf = ByteArray(256 * 1024)
             while (true) {
                 val n = input.read(buf)
                 if (n <= 0) break
                 out.write(buf, 0, n)
                 done += n
                 if (total > 0) {
-                    val pct = ((done * 100) / total).toInt().coerceIn(0, 99)
+                    val pct = ((done * 100) / total).toInt().coerceIn(0, 100)
                     if (pct != lastPct) {
                         lastPct = pct
                         onProgress(pct)
@@ -175,12 +201,15 @@ object WhisperEngine {
         }
     }
 
-    private fun extractTarBz2(tarBz2: File, destDir: File) {
+    private fun extractTarBz2(tarBz2: File, destDir: File, onProgress: (Int) -> Unit = {}) {
+        val totalBytes = tarBz2.length().coerceAtLeast(1L)
+        var approxRead = 0L
         FileInputStream(tarBz2).use { fis ->
-            BZip2CompressorInputStream(BufferedInputStream(fis, 64 * 1024)).use { bzIn ->
+            BZip2CompressorInputStream(BufferedInputStream(fis, 32 * 1024)).use { bzIn ->
                 TarArchiveInputStream(bzIn).use { tarIn ->
                     var entry = tarIn.nextEntry
-                    val buf = ByteArray(128 * 1024)
+                    val buf = ByteArray(64 * 1024)
+                    var fileCount = 0
                     while (entry != null) {
                         val name = entry.name.replace('\\', '/')
                         val base = name.substringAfterLast('/')
@@ -192,13 +221,22 @@ object WhisperEngine {
                         outFile.parentFile?.mkdirs()
                         FileOutputStream(outFile).use { out ->
                             var n: Int
-                            while (tarIn.read(buf).also { n = it } > 0) out.write(buf, 0, n)
+                            while (tarIn.read(buf).also { n = it } > 0) {
+                                out.write(buf, 0, n)
+                                approxRead += n
+                            }
                         }
+                        fileCount++
+                        // rough progress (compressed size unknown exactly)
+                        val pct = ((approxRead * 80) / (totalBytes * 3)).toInt().coerceIn(0, 99)
+                        onProgress(pct.coerceAtMost(95) + fileCount.coerceAtMost(4))
+                        if (fileCount % 2 == 0) System.gc()
                         entry = tarIn.nextEntry
                     }
                 }
             }
         }
+        onProgress(100)
     }
 
     @Synchronized
@@ -214,11 +252,20 @@ object WhisperEngine {
             return false
         }
         return try {
-            val dir = modelDir(context)
-            val enc = findFile(dir, "small-encoder.int8.onnx", "small-encoder.onnx")!!
-            val dec = findFile(dir, "small-decoder.int8.onnx", "small-decoder.onnx")!!
-            val tok = findFile(dir, "small-tokens.txt", "tokens.txt")!!
             System.gc()
+            val dir = modelDir(context)
+            val enc = findFile(
+                dir,
+                "tiny-encoder.int8.onnx", "tiny-encoder.onnx",
+                "small-encoder.int8.onnx", "small-encoder.onnx"
+            )!!
+            val dec = findFile(
+                dir,
+                "tiny-decoder.int8.onnx", "tiny-decoder.onnx",
+                "small-decoder.int8.onnx", "small-decoder.onnx"
+            )!!
+            val tok = findFile(dir, "tiny-tokens.txt", "small-tokens.txt", "tokens.txt")!!
+            Log.i(TAG, "loading enc=${enc.name} ${enc.length()} dec=${dec.name}")
             val config = OfflineRecognizerConfig(
                 modelConfig = OfflineModelConfig(
                     whisper = OfflineWhisperModelConfig(
@@ -226,12 +273,12 @@ object WhisperEngine {
                         decoder = dec.absolutePath,
                         language = lang,
                         task = "transcribe",
-                        tailPaddings = 1200
+                        tailPaddings = 500
                     ),
                     tokens = tok.absolutePath,
-                    modelType = "whisper",
-                    numThreads = 2,
-                    provider = "cpu"
+                    numThreads = 1,
+                    provider = "cpu",
+                    modelType = "whisper"
                 )
             )
             recognizer = OfflineRecognizer(config = config)
@@ -239,10 +286,13 @@ object WhisperEngine {
             lastError = ""
             true
         } catch (e: OutOfMemoryError) {
-            lastError = "حافظه کم برای Whisper"
+            recognizer = null
+            lastError = "حافظه کم — برنامه‌های دیگر را ببندید"
             Log.e(TAG, "OOM", e)
+            System.gc()
             false
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            recognizer = null
             lastError = e.message ?: "خطای Whisper"
             Log.e(TAG, "load fail", e)
             false
@@ -254,6 +304,7 @@ object WhisperEngine {
         try { recognizer?.release() } catch (_: Exception) {}
         recognizer = null
         loadedLang = ""
+        System.gc()
     }
 
     @Synchronized
@@ -266,6 +317,9 @@ object WhisperEngine {
             stream.acceptWaveform(floats, sampleRate)
             r.decode(stream)
             cleanResult(r.getResult(stream).text.trim())
+        } catch (e: OutOfMemoryError) {
+            lastError = "حافظه کم هنگام تشخیص"
+            ""
         } catch (_: Exception) {
             ""
         } finally {
@@ -278,6 +332,6 @@ object WhisperEngine {
         if (BAD_SCRIPT.containsMatchIn(text)) return ""
         var t = text.replace(Regex("""[«»""]"""), "")
         t = t.replace(Regex("""\s{2,}"""), " ").trim()
-        return NumberNormalizer.normalize(PersianPostProcess.fix(t)).trim()
+        return t
     }
 }

@@ -102,7 +102,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
         if (!prefs.getBoolean(KEY_HIDE_INVITE, false)) showInvite()
         SymSpell.ensureLoaded(this)
         OfflineAi.ensure(this)
-        prepareModel()
+        try { prepareModel() } catch (t: Throwable) {
+            binding.status.text = "خطا در شروع — دوباره باز کنید"
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -279,32 +281,25 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
     private fun prepareModel() {
-        if (WhisperEngine.isReady(this)) {
-            lifecycleScope.launch {
-                val ok = withContext(Dispatchers.IO) {
-                    try {
-                        WhisperEngine.load(this@MainActivity, "fa").also {
-                            if (OfflineLlm.isReady(this@MainActivity)) {
-                                try { kotlinx.coroutines.runBlocking { OfflineLlm.ensureLoaded(this@MainActivity) } } catch (_: Exception) {}
-                            }
-                        }
-                    } catch (_: Throwable) { false }
-                }
-                if (!isFinishing && !isDestroyed) {
-                    if (ok) {
-                        binding.status.text = "آماده — تایپ با Qwen آفلاین"
-                        binding.micButton.isEnabled = true
-                    } else {
-                        binding.status.text = "خطا: ${(WhisperEngine.lastError.ifBlank { VoskEngine.lastError }).ifBlank { "بارگذاری ناموفق" }}"
-                        binding.micButton.isEnabled = false
-                    }
-                }
+        // Do NOT load Whisper/Qwen on startup — that caused crash-loops (OOM).
+        // Only check if model files exist; load lazily on first mic press.
+        try {
+            if (WhisperEngine.isReady(this)) {
+                binding.status.text = if (OfflineLlm.isReady(this))
+                    "آماده — تایپ با Qwen آفلاین"
+                else
+                    "شنیدار آماده — برای تایپ بهتر Qwen را دانلود کنید"
+                binding.micButton.isEnabled = true
+                return
             }
+        } catch (t: Throwable) {
+            binding.status.text = "خطا در بررسی مدل"
+            binding.micButton.isEnabled = false
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود موتور")
-            .setMessage("برای تایپ با Qwen آفلاین: مدل شنیدار Whisper و مدل Qwen دانلود می‌شود (یک‌بار). بعد بدون اینترنت کار می‌کند.")
+            .setTitle("دانلود مدل")
+            .setMessage("مدل سبک Whisper Tiny (~۱۲۰ مگ) دانلود شود؟ بعد می‌توانید Qwen را هم برای تایپ بگیرید.")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -343,22 +338,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 if (isFinishing || isDestroyed) return@launch
                 // Load in a separate step; never kill UI if OOM
-                binding.status.text = "بارگذاری سبک…"
-                binding.progress.isIndeterminate = true
-                val ok = withContext(Dispatchers.IO) {
-                    try {
-                        System.gc()
-                        WhisperEngine.load(this@MainActivity, "fa")
-                    } catch (_: OutOfMemoryError) {
-                        WhisperEngine.lastError = "حافظه کم — اپ را دوباره باز کنید"
-                        false
-                    } catch (_: Throwable) {
-                        false
-                    }
-                }
+                // Never load full model right after extract (OOM/crash). Files on disk = ready.
                 if (isFinishing || isDestroyed) return@launch
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
+                val ok = WhisperEngine.isReady(this@MainActivity)
                 if (ok) {
                     binding.status.text = "آماده — تایپ با Qwen آفلاین"
                     binding.micButton.isEnabled = true
