@@ -385,8 +385,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                         // Live feed: resample chunk to 16k then to Vosk
                         try {
                             val chunk16 = AudioCapture.to16k(buf.copyOf(n), captureRate)
-                            val prepared = AudioPreprocessor.prepare(chunk16, 16000)
-                            val bytes = ShortArrayToBytes.pcm16ToBytes(prepared)
+                            val bytes = ShortArrayToBytes.pcm16ToBytes(chunk16)
                             val r = liveRecognizer ?: continue
                             if (r.acceptWaveForm(bytes, bytes.size)) {
                                 val text = VoskEngine.parseText(r.result)
