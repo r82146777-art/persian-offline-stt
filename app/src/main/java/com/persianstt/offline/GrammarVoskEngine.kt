@@ -39,11 +39,13 @@ object GrammarVoskEngine {
                 File(dir, "graph").exists() || File(dir, "ivector").exists())
     }
 
+    /** اول assets، بعد دانلود */
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
         if (isReady(context)) {
             onProgress(100)
             return
         }
+        // try copy from assets/model
         try {
             val am = context.assets
             val assetsList = try { am.list("model") } catch (_: Exception) { null }
@@ -61,6 +63,7 @@ object GrammarVoskEngine {
         } catch (e: Exception) {
             Log.w(TAG, "assets copy failed", e)
         }
+        // download
         val root = File(context.applicationContext.filesDir, "vosk-models")
         if (!root.exists()) root.mkdirs()
         val zip = File(root, "$MODEL_NAME.zip")
@@ -69,7 +72,9 @@ object GrammarVoskEngine {
         if (modelDir(context).exists()) modelDir(context).deleteRecursively()
         unzip(zip, root)
         zip.delete()
+        // zip usually extracts to folder named MODEL_NAME
         if (!isReady(context)) {
+            // sometimes nested
             root.listFiles()?.forEach { f ->
                 if (f.isDirectory && f.name.contains("fa")) {
                     if (f.absolutePath != modelDir(context).absolutePath) {
@@ -86,6 +91,7 @@ object GrammarVoskEngine {
         val am = context.assets
         val list = am.list(assetPath) ?: return
         if (list.isEmpty()) {
+            // file
             dest.parentFile?.mkdirs()
             am.open(assetPath).use { input ->
                 FileOutputStream(dest).use { output -> input.copyTo(output) }
@@ -174,6 +180,10 @@ object GrammarVoskEngine {
 
     fun getModel(): Model? = model
 
+    /**
+     * ساخت Recognizer با grammar محدود.
+     * grammarJson مثال: ["سلام","تایپ","[unk]"]
+     */
     fun createRecognizer(grammarWords: List<String>): Recognizer {
         val m = model ?: throw IllegalStateException("مدل بارگذاری نشده")
         val words = grammarWords.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
