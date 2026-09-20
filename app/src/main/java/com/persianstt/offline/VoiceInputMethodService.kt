@@ -614,19 +614,22 @@ class VoiceInputMethodService : InputMethodService() {
         }
     }
 
+    @Volatile private var imeCaptureRate = 16000
+
     private fun startVoice() {
         if (isListening) return
         isListening = true; pcmChunks.clear()
-        statusView?.text = "🎤 گوش می‌دهم… (توقف خودکار با سکوت)"
+        statusView?.text = "🎤 گوش می‌دهم… (۱۶کیلوهرتز)"
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_ACK, 80) } catch (_: Exception) {}
-        val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-        audioRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf * 2)
-        if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+        val session = AudioCapture.open()
+        if (session == null) {
             statusView?.text = "خطا در میکروفون"; isListening = false; return
         }
+        audioRecord = session.record
+        imeCaptureRate = session.captureRate
         audioRecord?.startRecording()
         listenJob = scope.launch(Dispatchers.IO) {
-            val buf = ShortArray(SAMPLE_RATE / 10) // 100ms frames
+            val buf = ShortArray(session.bufferShorts)
             var speechSeen = false
             var silentFrames = 0
             val silenceLimit = 12 // ~1.2s silence after speech → auto stop
@@ -687,7 +690,7 @@ class VoiceInputMethodService : InputMethodService() {
                 listenJob = null
             }
             val raw = pcmChunks.flatMap { it.toList() }.toShortArray(); pcmChunks.clear()
-            val (text0, engine) = DualAsr.transcribe(this@VoiceInputMethodService, raw, SAMPLE_RATE)
+            val (text0, engine) = DualAsr.transcribe(this@VoiceInputMethodService, raw, imeCaptureRate)
             var text = text0
             val secs = raw.size.toFloat() / SAMPLE_RATE
             withContext(Dispatchers.Main) {

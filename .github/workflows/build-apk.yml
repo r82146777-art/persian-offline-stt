@@ -56,8 +56,8 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v4.0.0
-          name: "v4.0.0 - Vosk grammar + dictionary (spec rewrite)"
+          tag_name: v4.1.0
+          name: "v4.1.0 - force 16kHz mono resample (fix hallucination)"
           body: |
             ## نسخه ۳.۱۶.۰
             * موتور تشخیص: Vosk آفلاین

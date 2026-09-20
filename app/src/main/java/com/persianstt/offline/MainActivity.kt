@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     private var finalText = StringBuilder()
     private var currentLang = LANG_FA
     private val pcmChunks = CopyOnWriteArrayList<ShortArray>()
+    @Volatile private var captureRate = 16000
 
     companion object {
         private const val REQ_MIC = 1001
@@ -359,41 +360,35 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     return
                 }
                 liveRecognizer = rec
-                val minBuf = AudioRecord.getMinBufferSize(
-                    SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
-                )
-                audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                    (minBuf * 2).coerceAtLeast(SAMPLE_RATE)
-                )
-                if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                // Critical: open mic with real device rate, later force 16 kHz for STT
+                val session = AudioCapture.open()
+                if (session == null) {
                     Toast.makeText(this, "خطا در میکروفون", Toast.LENGTH_SHORT).show()
                     try { rec.close() } catch (_: Exception) {}
                     liveRecognizer = null
                     return
                 }
+                audioRecord = session.record
+                captureRate = session.captureRate
                 pcmChunks.clear()
                 isListening = true
                 audioRecord?.startRecording()
                 binding.micButton.text = getString(R.string.btn_stop)
-                binding.status.text = "در حال گوش دادن (Vosk Grammar)…"
+                binding.status.text = "گوش دادن… (${captureRate}→16kHz)"
+                val frameSize = session.bufferShorts
                 listenJob = lifecycleScope.launch(Dispatchers.IO) {
-                    val buf = ShortArray(SAMPLE_RATE / 10)
-                    val byteBuf = ByteArray(buf.size * 2)
+                    val buf = ShortArray(frameSize)
                     while (isActive && isListening) {
                         val n = audioRecord?.read(buf, 0, buf.size) ?: -1
                         if (n <= 0) continue
                         pcmChunks.add(buf.copyOf(n))
-                        // feed Vosk live
-                        for (i in 0 until n) {
-                            val v = buf[i].toInt()
-                            byteBuf[i * 2] = (v and 0xff).toByte()
-                            byteBuf[i * 2 + 1] = ((v shr 8) and 0xff).toByte()
-                        }
+                        // Live feed: resample chunk to 16k then to Vosk
                         try {
+                            val chunk16 = AudioCapture.to16k(buf.copyOf(n), captureRate)
+                            val prepared = AudioPreprocessor.prepare(chunk16, 16000)
+                            val bytes = ShortArrayToBytes.pcm16ToBytes(prepared)
                             val r = liveRecognizer ?: continue
-                            if (r.acceptWaveForm(byteBuf, n * 2)) {
+                            if (r.acceptWaveForm(bytes, bytes.size)) {
                                 val text = VoskEngine.parseText(r.result)
                                 if (text.isNotBlank()) {
                                     withContext(Dispatchers.Main) {
@@ -459,7 +454,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     for (c in pcmChunks) {
                         System.arraycopy(c, 0, pcm, o, c.size); o += c.size
                     }
-                    finalText = DualAsr.transcribe(this@MainActivity, pcm, SAMPLE_RATE).first
+                    finalText = DualAsr.transcribe(this@MainActivity, pcm, captureRate).first
                 }
             }
             pcmChunks.clear()
