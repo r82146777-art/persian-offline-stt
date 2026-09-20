@@ -163,13 +163,13 @@
         app:layout_constraintEnd_toEndOf="parent">
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/editButton"
+            android:id="@+id/dictButton"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
             android:layout_marginEnd="4dp"
-            android:text="اصلاح متن"
+            android:text="افزودن دیکت"
             android:textSize="12sp" />
 
         <com.google.android.material.button.MaterialButton

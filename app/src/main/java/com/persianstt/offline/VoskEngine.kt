@@ -14,129 +14,149 @@ import java.net.URL
 import java.util.zip.ZipInputStream
 
 /**
- * Vosk Persian **small** model only (~53MB).
- * Large fa-0.42 caused OOM / whole-phone freeze during prepare.
+ * Vosk small-fa with Grammar Adaptation (JSON word list).
+ * Model: copy from assets if present, else download vosk-model-small-fa-0.42 (~45MB).
  */
 object VoskEngine {
 
     private const val TAG = "VoskEngine"
     private const val FA_NAME = "vosk-model-small-fa-0.42"
-    private const val FA_URL =
-        "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip"
-    private val FA_MIRRORS = listOf(
+    private const val ASSET_NAME = "vosk-model-small-fa-0.5"
+    private val URLS = listOf(
         "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip",
         "https://github.com/alphacep/vosk-api/releases/download/v0.3.42/vosk-model-small-fa-0.42.zip"
     )
 
     @Volatile private var model: Model? = null
+    @Volatile private var grammarSnapshot: String = ""
     @Volatile var lastError: String = ""
-    @Volatile var lastPhase: String = ""
 
-    private fun modelsRoot(context: Context): File =
+    private fun modelsRoot(context: Context) =
         File(context.applicationContext.filesDir, "vosk-models")
 
-    private fun modelDir(context: Context): File =
-        File(modelsRoot(context), FA_NAME)
+    private fun modelDir(context: Context): File {
+        val a = File(modelsRoot(context), ASSET_NAME)
+        if (a.isDirectory && a.listFiles()?.isNotEmpty() == true) return a
+        return File(modelsRoot(context), FA_NAME)
+    }
 
     fun isReady(context: Context): Boolean {
         val dir = modelDir(context)
         if (!dir.isDirectory) return false
-        // small model structure
         return dir.listFiles()?.isNotEmpty() == true &&
             (File(dir, "am").exists() || File(dir, "conf").exists() ||
                 File(dir, "graph").exists() || File(dir, "ivector").exists())
     }
 
-    /** Download + unzip only. Does NOT load Model into RAM. */
     fun ensureModel(context: Context, onProgress: (Int) -> Unit = {}) {
         if (isReady(context)) {
             onProgress(100)
-            lastPhase = "ready"
             return
         }
-        val root = modelsRoot(context)
-        if (!root.exists()) root.mkdirs()
-
-        // Delete the huge model that freezes phones
+        // try assets first (vosk-model-small-fa-0.5.zip or folder)
         try {
-            File(root, "vosk-model-fa-0.42").deleteRecursively()
-            File(root, "vosk-model-fa-0.42.zip").delete()
-            File(root, "vosk-model-fa-0.42.zip.part").delete()
-        } catch (_: Exception) {}
-
-        val zipFile = File(root, "$FA_NAME.zip")
-        try {
-            lastPhase = "download"
-            var downloaded = false
-            var lastEx: Exception? = null
-            for (url in FA_MIRRORS) {
-                try {
-                    downloadResumable(url, zipFile) { pct -> onProgress((pct * 85) / 100) }
-                    if (zipFile.exists() && zipFile.length() > 1_000_000) {
-                        downloaded = true
-                        break
-                    }
-                } catch (e: Exception) {
-                    lastEx = e
-                }
+            if (copyFromAssets(context, onProgress)) {
+                onProgress(100)
+                return
             }
-            if (!downloaded) throw (lastEx ?: IllegalStateException("دانلود ناموفق"))
-            onProgress(86)
-            if (!zipFile.exists() || zipFile.length() < 1_000_000) {
-                lastError = "دانلود ناقص"
-                throw IllegalStateException(lastError)
-            }
-            lastPhase = "extract"
-            unzip(zipFile, root) { p -> onProgress(86 + (p * 12) / 100) }
-            onProgress(98)
-            try { zipFile.delete() } catch (_: Exception) {}
-            // rename if zip used different folder name
-            root.listFiles()?.forEach { f ->
-                if (f.isDirectory && f.name.contains("small-fa") && f.name != FA_NAME) {
-                    val dest = File(root, FA_NAME)
-                    if (!dest.exists()) f.renameTo(dest)
-                }
-            }
-            System.gc()
-            if (!isReady(context)) {
-                lastError = "استخراج ناقص"
-                throw IllegalStateException(lastError)
-            }
-            onProgress(100)
-            lastError = ""
-            lastPhase = "extracted"
-        } catch (e: OutOfMemoryError) {
-            lastError = "حافظه کم هنگام آماده‌سازی"
-            try { System.gc() } catch (_: Throwable) {}
-            throw e
-        } catch (e: java.net.UnknownHostException) {
-            lastError = "اینترنت/DNS قطع"
-            throw e
         } catch (e: Exception) {
-            lastError = e.message ?: "خطای دانلود"
-            throw e
+            Log.w(TAG, "assets copy fail", e)
+        }
+        val root = modelsRoot(context)
+        root.mkdirs()
+        val zip = File(root, "$FA_NAME.zip")
+        var last: Exception? = null
+        for (url in URLS) {
+            try {
+                download(url, zip, onProgress)
+                onProgress(90)
+                unzip(zip, root)
+                onProgress(98)
+                try { zip.delete() } catch (_: Exception) {}
+                if (isReady(context)) {
+                    onProgress(100)
+                    lastError = ""
+                    return
+                }
+            } catch (e: Exception) {
+                last = e
+                Log.e(TAG, "dl $url", e)
+            }
+        }
+        lastError = last?.message ?: "دانلود مدل ناموفق"
+        throw IllegalStateException(lastError)
+    }
+
+    private fun copyFromAssets(context: Context, onProgress: (Int) -> Unit): Boolean {
+        val am = context.assets
+        val names = try { am.list("")?.toList().orEmpty() } catch (_: Exception) { emptyList() }
+        // zip in assets
+        val zipName = names.firstOrNull {
+            it.contains("vosk-model-small-fa") && it.endsWith(".zip")
+        }
+        if (zipName != null) {
+            onProgress(5)
+            val root = modelsRoot(context)
+            root.mkdirs()
+            val outZip = File(root, zipName)
+            am.open(zipName).use { inp ->
+                FileOutputStream(outZip).use { out -> inp.copyTo(out) }
+            }
+            onProgress(50)
+            unzip(outZip, root)
+            try { outZip.delete() } catch (_: Exception) {}
+            onProgress(95)
+            return isReady(context)
+        }
+        // folder in assets
+        val folder = names.firstOrNull { it == ASSET_NAME || it == FA_NAME } ?: return false
+        val dest = File(modelsRoot(context), folder)
+        dest.mkdirs()
+        copyAssetDir(context, folder, dest)
+        return isReady(context)
+    }
+
+    private fun copyAssetDir(context: Context, assetPath: String, dest: File) {
+        val list = context.assets.list(assetPath) ?: return
+        if (list.isEmpty()) {
+            // file
+            context.assets.open(assetPath).use { inp ->
+                FileOutputStream(dest).use { out -> inp.copyTo(out) }
+            }
+            return
+        }
+        dest.mkdirs()
+        for (name in list) {
+            val childAsset = "$assetPath/$name"
+            val childDest = File(dest, name)
+            val sub = context.assets.list(childAsset)
+            if (sub.isNullOrEmpty()) {
+                context.assets.open(childAsset).use { inp ->
+                    FileOutputStream(childDest).use { out -> inp.copyTo(out) }
+                }
+            } else {
+                copyAssetDir(context, childAsset, childDest)
+            }
         }
     }
 
-    private fun downloadResumable(urlStr: String, dest: File, onProgress: (Int) -> Unit) {
+    private fun download(urlStr: String, dest: File, onProgress: (Int) -> Unit) {
         val tmp = File(dest.absolutePath + ".part")
         var existing = if (tmp.exists()) tmp.length() else 0L
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 20_000
-            readTimeout = 600_000
+            connectTimeout = 30_000
+            readTimeout = 300_000
             instanceFollowRedirects = true
             if (existing > 0) setRequestProperty("Range", "bytes=$existing-")
         }
         conn.connect()
         val code = conn.responseCode
         if (code == 200 && existing > 0) {
-            existing = 0
-            tmp.delete()
+            existing = 0; tmp.delete()
         }
-        if (code !in 200..299) throw IllegalStateException("HTTP $code")
-        val totalFromHeader = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
-        val total = if (code == 206 && totalFromHeader > 0) existing + totalFromHeader
-        else if (totalFromHeader > 0) totalFromHeader else -1L
+        if (code !in 200..299 && code != 206) throw IllegalStateException("HTTP $code")
+        val totalHdr = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
+        val total = if (code == 206 && totalHdr > 0) existing + totalHdr else if (totalHdr > 0) totalHdr else -1L
         BufferedInputStream(conn.inputStream, 256 * 1024).use { input ->
             FileOutputStream(tmp, existing > 0 && code == 206).use { out ->
                 var done = existing
@@ -148,37 +168,25 @@ object VoskEngine {
                     out.write(buf, 0, n)
                     done += n
                     if (total > 0) {
-                        val pct = ((done * 100) / total).toInt().coerceIn(0, 99)
-                        if (pct != last) {
-                            last = pct
-                            onProgress(pct)
-                        }
+                        val pct = ((done * 90) / total).toInt().coerceIn(0, 90)
+                        if (pct != last) { last = pct; onProgress(pct) }
                     }
                 }
-                out.flush()
             }
         }
         conn.disconnect()
         if (dest.exists()) dest.delete()
         if (!tmp.renameTo(dest)) {
-            tmp.copyTo(dest, overwrite = true)
-            tmp.delete()
+            tmp.copyTo(dest, overwrite = true); tmp.delete()
         }
     }
 
-    private fun unzip(zipFile: File, destRoot: File, onProgress: (Int) -> Unit) {
-        var entries = 0
-        ZipInputStream(BufferedInputStream(FileInputStream(zipFile), 32 * 1024)).use { zis ->
-            val buf = ByteArray(256 * 1024)
+    private fun unzip(zipFile: File, destDir: File) {
+        ZipInputStream(BufferedInputStream(FileInputStream(zipFile), 64 * 1024)).use { zis ->
             var entry = zis.nextEntry
+            val buf = ByteArray(64 * 1024)
             while (entry != null) {
-                val name = entry.name
-                if (name.contains("..")) {
-                    zis.closeEntry()
-                    entry = zis.nextEntry
-                    continue
-                }
-                val outFile = File(destRoot, name)
+                val outFile = File(destDir, entry.name)
                 if (entry.isDirectory) {
                     outFile.mkdirs()
                 } else {
@@ -189,123 +197,108 @@ object VoskEngine {
                     }
                 }
                 zis.closeEntry()
-                entries++
-                if (entries % 5 == 0) {
-                    onProgress((entries * 2).coerceIn(0, 99))
-                }
                 entry = zis.nextEntry
             }
         }
-        onProgress(99)
     }
 
     @Synchronized
     fun load(context: Context): Boolean {
         if (model != null) return true
         if (!isReady(context)) {
-            lastError = "مدل نیست"
+            lastError = "مدل Vosk نیست"
             return false
         }
-        lastPhase = "load"
         return try {
             System.gc()
-            Thread.sleep(150)
             model = Model(modelDir(context).absolutePath)
-            // Full vocabulary: do NOT restrict grammar — recognize all Persian words
-            grammarJson = null
             lastError = ""
-            lastPhase = "loaded"
             true
         } catch (e: OutOfMemoryError) {
             model = null
-            lastError = "حافظه کم — برنامه‌های دیگر را ببندید"
-            Log.e(TAG, "OOM load", e)
-            try { System.gc() } catch (_: Throwable) {}
+            lastError = "حافظه کم"
             false
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             model = null
-            lastError = e.message ?: "خطای بارگذاری"
-            Log.e(TAG, "load", e)
+            lastError = e.message ?: "بارگذاری ناموفق"
             false
         }
+    }
+
+    /** Create recognizer with current grammar from DictionaryStore. */
+    @Synchronized
+    fun createRecognizer(context: Context): Recognizer? {
+        if (!load(context)) return null
+        val m = model ?: return null
+        val grammar = DictionaryStore.grammarJson(context)
+        grammarSnapshot = grammar
+        return try {
+            Recognizer(m, 16000.0f, grammar)
+        } catch (e: Exception) {
+            Log.e(TAG, "grammar recognizer fail, free mode", e)
+            try {
+                Recognizer(m, 16000.0f)
+            } catch (e2: Exception) {
+                lastError = e2.message ?: "Recognizer"
+                null
+            }
+        }
+    }
+
+    /** Call when dictionary changes — releases so next create uses new grammar. */
+    @Synchronized
+    fun resetGrammar(context: Context) {
+        grammarSnapshot = ""
+        // model can stay loaded; new Recognizer picks new grammar
+        Log.i(TAG, "grammar reset, words=${DictionaryStore.allWords(context).size}")
     }
 
     @Synchronized
     fun release() {
         try { model?.close() } catch (_: Exception) {}
         model = null
-        lastPhase = "released"
+        grammarSnapshot = ""
+        System.gc()
     }
 
-    /** Stage 2 — optional Vosk grammar (limited vocabulary) */
-    @Volatile private var grammarJson: String? = null
-
-    fun setCustomVocabulary(words: Collection<String>) {
-        val cleaned = words.map { it.trim() }.filter { it.length in 1..40 }.distinct()
-        if (cleaned.isEmpty()) {
-            grammarJson = null
-            return
-        }
-        // Vosk grammar: JSON array of phrases
-        val arr = cleaned.joinToString(prefix = "[", postfix = "]") { "\"" + it.replace("\"", "") + "\"" }
-        grammarJson = arr
-    }
-
-    fun loadDefaultVocabulary() {
-        val core = listOf(
-            "سلام", "درود", "عرض سلام", "عرض سلام و ادب و احترام", "ادب و احترام",
-            "صبح بخیر", "شب بخیر", "خداحافظ", "خسته نباشید", "ممنون", "ممنونم",
-            "لطفا", "ببخشید", "بله", "نه", "باشه", "چشم", "دوستان عزیز",
-            "خدمت تمام دوستان عزیز", "یک", "دو", "سه", "چهار", "پنج",
-            "شش", "هفت", "هشت", "نه", "ده", "امروز", "فردا", "دیروز",
-            "خانه", "کار", "خوب", "بد", "آب", "نان", "کمک", "تلفن",
-            "عرض ادب", "سلام و عرض ادب", "با عرض سلام", "با احترام",
-            "روز بخیر", "وقت بخیر", "خدا قوت", "دستت درد نکنه",
-            "خیلی ممنون", "متشکرم", "خواهش می‌کنم"
-        )
-        setCustomVocabulary(core)
-    }
-
-    @Synchronized
-    fun transcribe(pcm16: ShortArray, sampleRate: Int = 16000): String {
-        val m = model ?: return ""
-        if (pcm16.isEmpty() || pcm16.size < sampleRate / 8) return ""
-        // ensure 16k path
-        val sr = if (sampleRate == 16000) 16000 else 16000
+    /** One-shot batch (legacy DualAsr). Prefer streaming Recognizer in Activity. */
+    fun transcribe(context: Context, pcm16: ShortArray, sampleRate: Int = 16000): String {
+        val rec = createRecognizer(context) ?: return ""
         return try {
-            val g: String? = null // full lexicon; restricted grammar disabled
-            val rec = if (!g.isNullOrBlank()) {
-                try {
-                    Recognizer(m, sr.toFloat(), g)
-                } catch (_: Exception) {
-                    Recognizer(m, sr.toFloat())
-                }
-            } else {
-                Recognizer(m, sr.toFloat())
-            }
-            var off = 0
-            val chunk = sr / 2
-            while (off < pcm16.size) {
-                val n = minOf(chunk, pcm16.size - off)
-                rec.acceptWaveForm(pcm16.copyOfRange(off, off + n), n)
-                off += n
-            }
-            val json = rec.finalResult
-            rec.close()
-            val raw = JSONObject(json).optString("text", "").trim()
-            val fixed = NumberNormalizer.normalize(PersianPostProcess.fix(raw))
-            // stage-3 extra: SimpleVocab if loaded
-            try {
-                PersianCorrector.fix(fixed)
-            } catch (_: Exception) {
-                fixed
-            }
-        } catch (e: OutOfMemoryError) {
-            lastError = "حافظه کم هنگام تشخیص"
-            ""
+            val bytes = ShortArrayToBytes.pcm16ToBytes(pcm16)
+            rec.acceptWaveForm(bytes, bytes.size)
+            val finalJson = rec.finalResult
+            parseText(finalJson)
         } catch (e: Exception) {
-            lastError = e.message ?: "خطای تشخیص"
+            lastError = e.message ?: ""
             ""
+        } finally {
+            try { rec.close() } catch (_: Exception) {}
         }
+    }
+
+    fun parsePartial(json: String): String {
+        return try {
+            JSONObject(json).optString("partial", "")
+        } catch (_: Exception) { "" }
+    }
+
+    fun parseText(json: String): String {
+        return try {
+            val o = JSONObject(json)
+            o.optString("text", "").ifBlank { o.optString("partial", "") }
+        } catch (_: Exception) { "" }
+    }
+}
+
+object ShortArrayToBytes {
+    fun pcm16ToBytes(pcm: ShortArray): ByteArray {
+        val out = ByteArray(pcm.size * 2)
+        for (i in pcm.indices) {
+            val v = pcm[i].toInt()
+            out[i * 2] = (v and 0xff).toByte()
+            out[i * 2 + 1] = ((v shr 8) and 0xff).toByte()
+        }
+        return out
     }
 }

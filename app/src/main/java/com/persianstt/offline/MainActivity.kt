@@ -33,6 +33,19 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class MainActivity : AppCompatActivity() {
 
+    private val dictFileLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            try {
+                val n = DictionaryStore.importFromUri(this, uri)
+                VoskEngine.resetGrammar(this)
+                Toast.makeText(this, "$n واژه از فایل اضافه شد", Toast.LENGTH_SHORT).show()
+                binding.status.text = "آماده — Vosk + دیکت (${DictionaryStore.allWords(this).size} واژه)"
+            } catch (e: Exception) {
+                Toast.makeText(this, "خطای فایل: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: SharedPreferences
     private var audioRecord: AudioRecord? = null
@@ -75,9 +88,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             }
         }
         binding.copyButton.setOnClickListener { copyText() }
-        binding.editButton.visibility = android.view.View.GONE
-        // اصلاح متن حذف شد — فقط ایموجی با AI آفلاین
-        // binding.editButton.setOnClickListener { showEditTextDialog() }
+        binding.dictButton.setOnClickListener { showDictDialog() }
         binding.emojiButton.setOnClickListener { applyEmojis() }
         binding.clearButton.setOnClickListener {
             finalText.clear()
@@ -164,32 +175,32 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
 
 
-    private fun showEditTextDialog() {
-        val current = binding.resultText.text?.toString()?.trim().orEmpty()
-        if (current.isBlank()) {
-            Toast.makeText(this, "متنی برای اصلاح نیست", Toast.LENGTH_SHORT).show()
-            return
+    private fun showDictDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "کلمه یا عبارت جدید"
+            setSingleLine(false)
+            minLines = 2
         }
-        if (!OfflineLlm.isReady(this)) {
-            Toast.makeText(this, "مدل هوش مصنوعی دانلود نشده — اول مدل Qwen را دانلود کنید", Toast.LENGTH_LONG).show()
-            return
-        }
-        binding.status.text = "هوش مصنوعی آفلاین در حال اصلاح…"
-        lifecycleScope.launch {
-            val fixed = OfflineLlm.correctText(this@MainActivity, current)
-            if (isFinishing || isDestroyed) return@launch
-            val out = fixed.ifBlank { current }
-            finalText.clear(); finalText.append(out)
-            binding.resultText.setText(out)
-            binding.resultText.setSelection(out.length)
-            val msg = when {
-                fixed.isBlank() -> "هوش مصنوعی پاسخ نداد — ${OfflineLlm.lastError}"
-                fixed != current -> "اصلاح شد با هوش مصنوعی آفلاین"
-                else -> "متن از قبل درست بود"
+        MaterialAlertDialogBuilder(this)
+            .setTitle("افزودن به دیکت (${DictionaryStore.allWords(this).size} واژه)")
+            .setMessage("کلمه بنویسید یا از منوی زیر فایل متنی وارد کنید.")
+            .setView(input)
+            .setPositiveButton("افزودن") { _, _ ->
+                val w = input.text?.toString().orEmpty()
+                w.split(Regex("[\n,;]+")).forEach { DictionaryStore.addWord(this, it) }
+                VoskEngine.resetGrammar(this)
+                Toast.makeText(this, "دیکت به‌روز شد — موتور ریست شد", Toast.LENGTH_SHORT).show()
+                binding.status.text = "آماده — Vosk + دیکت (${DictionaryStore.allWords(this).size} واژه)"
             }
-            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-            binding.status.text = "آماده — تایپ با Qwen آفلاین"
-        }
+            .setNeutralButton("فایل متنی") { _, _ ->
+                try {
+                    dictFileLauncher.launch(arrayOf("text/plain", "text/*"))
+                } catch (e: Exception) {
+                    Toast.makeText(this, "خطا: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("بستن", null)
+            .show()
     }
 
     private fun applyEmojis() {
@@ -198,28 +209,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        if (!OfflineLlm.isReady(this)) {
-            // fallback rules only if AI package missing
-            val e = OfflineAi.addEmojis(current)
-            binding.resultText.setText(e)
-            Toast.makeText(this, "مدل AI نیست — ایموجی ساده", Toast.LENGTH_SHORT).show()
-            return
-        }
-        binding.status.text = "هوش مصنوعی: افزودن ایموجی…"
-        lifecycleScope.launch {
-            var out = OfflineLlm.addEmojis(this@MainActivity, current)
-            if (out.isBlank()) out = OfflineAi.addEmojis(current)
-            if (isFinishing || isDestroyed) return@launch
-            finalText.clear(); finalText.append(out)
-            binding.resultText.setText(out)
-            binding.resultText.setSelection(out.length)
-            Toast.makeText(
-                this@MainActivity,
-                if (out != current) "ایموجی با هوش مصنوعی اضافه شد" else "ایموجی اضافه نشد",
-                Toast.LENGTH_SHORT
-            ).show()
-            binding.status.text = "آماده — تایپ با Qwen آفلاین"
-        }
+        val enriched = OfflineAi.addEmojis(current)
+        finalText.clear(); finalText.append(enriched)
+        binding.resultText.setText(enriched)
+        binding.resultText.setSelection(enriched.length)
+        Toast.makeText(this, if (enriched != current) "ایموجی اضافه شد" else "ایموجی‌ای پیدا نشد", Toast.LENGTH_SHORT).show()
     }
 
     private fun showSoundSettings() {
@@ -281,25 +275,23 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
     private fun prepareModel() {
-        // Do NOT load Whisper/Qwen on startup — that caused crash-loops (OOM).
-        // Only check if model files exist; load lazily on first mic press.
         try {
-            if (WhisperEngine.isReady(this)) {
-                binding.status.text = if (OfflineLlm.isReady(this))
-                    "آماده — تایپ با Qwen آفلاین"
-                else
-                    "شنیدار آماده — برای تایپ بهتر Qwen را دانلود کنید"
+            if (VoskEngine.isReady(this)) {
+                binding.status.text = "آماده — Vosk + دیکت (${DictionaryStore.allWords(this).size} واژه)"
                 binding.micButton.isEnabled = true
+                Thread {
+                    try { VoskEngine.load(this@MainActivity) } catch (_: Exception) {}
+                }.start()
                 return
             }
-        } catch (t: Throwable) {
+        } catch (_: Throwable) {
             binding.status.text = "خطا در بررسی مدل"
             binding.micButton.isEnabled = false
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("دانلود مدل")
-            .setMessage("مدل سبک Whisper Tiny (~۱۲۰ مگ) دانلود شود؟ بعد می‌توانید Qwen را هم برای تایپ بگیرید.")
+            .setTitle("دانلود مدل Vosk")
+            .setMessage("مدل فارسی سبک Vosk (~۴۵ مگ) یک‌بار دانلود شود؟")
             .setPositiveButton("بله") { _, _ -> startModelDownload() }
             .setNegativeButton("خیر") { _, _ ->
                 binding.status.text = "دانلود لغو شد"
@@ -315,72 +307,30 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 binding.micButton.isEnabled = false
                 binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.VISIBLE
-                binding.status.text = "دانلود…"
+                binding.status.text = "دانلود مدل Vosk…"
                 withContext(Dispatchers.IO) {
-                    try { WhisperEngine.release() } catch (_: Throwable) {}
-                    try { VoskEngine.release() } catch (_: Throwable) {}
-                    try { VoskEngine.release() } catch (_: Throwable) {}
-                    try { Qwen3Engine.release() } catch (_: Throwable) {}
                     try { VoskEngine.release() } catch (_: Throwable) {}
                     System.gc()
-                    WhisperEngine.ensureModel(this@MainActivity) { pct ->
+                    VoskEngine.ensureModel(this@MainActivity) { pct ->
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
                                 binding.progress.progress = pct
-                                binding.status.text = when {
-                                    pct < 86 -> "دانلود $pct٪"
-                                    pct < 100 -> "استخراج $pct٪"
-                                    else -> "آماده"
-                                }
+                                binding.status.text = if (pct < 90) "دانلود $pct٪" else "استخراج $pct٪"
                             }
                         }
                     }
                 }
                 if (isFinishing || isDestroyed) return@launch
-                // Load in a separate step; never kill UI if OOM
-                // Never load full model right after extract (OOM/crash). Files on disk = ready.
-                if (isFinishing || isDestroyed) return@launch
-                binding.progress.isIndeterminate = false
                 binding.progress.visibility = android.view.View.GONE
-                val ok = WhisperEngine.isReady(this@MainActivity)
-                if (ok) {
-                    binding.status.text = "آماده — تایپ با Qwen آفلاین"
-                    binding.micButton.isEnabled = true
-                    // download offline LLM package (Qwen) if missing
-                    if (!OfflineLlm.isReady(this@MainActivity)) {
-                        binding.status.text = "دانلود Qwen برای تایپ (~۴۰۰ مگ)…"
-                        binding.progress.visibility = android.view.View.VISIBLE
-                        binding.progress.isIndeterminate = false
-                        val llmOk = withContext(Dispatchers.IO) {
-                            try {
-                                OfflineLlm.ensureModel(this@MainActivity) { pct ->
-                                    runOnUiThread {
-                                        if (!isFinishing && !isDestroyed) {
-                                            binding.progress.progress = pct
-                                            binding.status.text = "دانلود $pct٪"
-                                        }
-                                    }
-                                }
-                                true
-                            } catch (_: Exception) { false }
-                        }
-                        binding.progress.visibility = android.view.View.GONE
-                        binding.status.text = if (llmOk) "آماده — تایپ با Qwen آفلاین"
-                            else "شنیدار آماده — Qwen: ${OfflineLlm.lastError}"
-                    } else {
-                        binding.status.text = "آماده — تایپ با Qwen آفلاین"
+                if (VoskEngine.isReady(this@MainActivity)) {
+                    withContext(Dispatchers.IO) {
+                        try { VoskEngine.load(this@MainActivity) } catch (_: Exception) {}
                     }
-                } else if (WhisperEngine.isReady(this@MainActivity)) {
-                    binding.status.text = "دانلود شد — یک‌بار اپ را ببندید و باز کنید"
-                    binding.micButton.isEnabled = false
+                    binding.status.text = "آماده — Vosk + دیکت"
+                    binding.micButton.isEnabled = true
                 } else {
-                    binding.status.text = "خطا: ${WhisperEngine.lastError.ifBlank { VoskEngine.lastError }}"
+                    binding.status.text = "خطا: ${VoskEngine.lastError}"
                     binding.micButton.isEnabled = false
-                }
-            } catch (e: OutOfMemoryError) {
-                if (!isFinishing && !isDestroyed) {
-                    binding.progress.visibility = android.view.View.GONE
-                    binding.status.text = "حافظه کم — برنامه‌های دیگر را ببندید"
                 }
             } catch (e: Throwable) {
                 if (!isFinishing && !isDestroyed) {
@@ -391,9 +341,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
     }
 
+
+    @Volatile private var liveRecognizer: org.vosk.Recognizer? = null
+
     private fun startListening() {
-        if (isFinishing || isDestroyed) return
-        if (!WhisperEngine.isReady(this)) {
+        if (!VoskEngine.isReady(this)) {
             Toast.makeText(this, "مدل هنوز آماده نیست", Toast.LENGTH_SHORT).show()
             prepareModel()
             return
@@ -401,6 +353,12 @@ override fun onCreate(savedInstanceState: Bundle?) {
         synchronized(stopLock) {
             if (isListening) return
             try {
+                val rec = VoskEngine.createRecognizer(this)
+                if (rec == null) {
+                    Toast.makeText(this, "خطا: ${VoskEngine.lastError}", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                liveRecognizer = rec
                 val minBuf = AudioRecord.getMinBufferSize(
                     SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
                 )
@@ -411,18 +369,52 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 )
                 if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                     Toast.makeText(this, "خطا در میکروفون", Toast.LENGTH_SHORT).show()
+                    try { rec.close() } catch (_: Exception) {}
+                    liveRecognizer = null
                     return
                 }
                 pcmChunks.clear()
                 isListening = true
                 audioRecord?.startRecording()
                 binding.micButton.text = getString(R.string.btn_stop)
-                binding.status.text = getString(R.string.status_listening)
+                binding.status.text = "در حال گوش دادن (Vosk Grammar)…"
                 listenJob = lifecycleScope.launch(Dispatchers.IO) {
-                    val buf = ShortArray(SAMPLE_RATE / 5)
+                    val buf = ShortArray(SAMPLE_RATE / 10)
+                    val byteBuf = ByteArray(buf.size * 2)
                     while (isActive && isListening) {
                         val n = audioRecord?.read(buf, 0, buf.size) ?: -1
-                        if (n > 0) pcmChunks.add(buf.copyOf(n))
+                        if (n <= 0) continue
+                        pcmChunks.add(buf.copyOf(n))
+                        // feed Vosk live
+                        for (i in 0 until n) {
+                            val v = buf[i].toInt()
+                            byteBuf[i * 2] = (v and 0xff).toByte()
+                            byteBuf[i * 2 + 1] = ((v shr 8) and 0xff).toByte()
+                        }
+                        try {
+                            val r = liveRecognizer ?: continue
+                            if (r.acceptWaveForm(byteBuf, n * 2)) {
+                                val text = VoskEngine.parseText(r.result)
+                                if (text.isNotBlank()) {
+                                    withContext(Dispatchers.Main) {
+                                        if (!isFinishing && !isDestroyed) {
+                                            binding.resultText.setText(text)
+                                            binding.resultText.setSelection(text.length)
+                                        }
+                                    }
+                                }
+                            } else {
+                                val partial = VoskEngine.parsePartial(r.partialResult)
+                                if (partial.isNotBlank()) {
+                                    withContext(Dispatchers.Main) {
+                                        if (!isFinishing && !isDestroyed) {
+                                            binding.resultText.setText(partial)
+                                            binding.resultText.setSelection(partial.length)
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {}
                     }
                 }
             } catch (e: Exception) {
@@ -435,77 +427,54 @@ override fun onCreate(savedInstanceState: Bundle?) {
     private fun stopListening() {
         synchronized(stopLock) {
             if (!isListening) return
+            isListening = false
         }
         if (!isFinishing && !isDestroyed) {
             binding.micButton.text = getString(R.string.btn_mic)
-            binding.status.text = "در حال تشخیص…"
-            binding.micButton.isEnabled = false
+            binding.status.text = "نهایی‌سازی…"
         }
         lifecycleScope.launch(Dispatchers.IO) {
-            // keep mic open a bit so last phonemes arrive
-            try { kotlinx.coroutines.delay(500) } catch (_: Exception) {}
-            val job = listenJob
-            synchronized(stopLock) {
-                isListening = false
-            }
-            // let the reader loop exit cleanly (don't cancel mid-read)
-            try { job?.join() } catch (_: Exception) {}
-            synchronized(stopLock) {
-                try {
-                    val ar = audioRecord
-                    if (ar != null) {
-                        try {
-                            val tail = ShortArray(SAMPLE_RATE / 2)
-                            var got = 0
-                            // drain up to ~0.5s
-                            while (got < tail.size) {
-                                val n = ar.read(tail, got, (tail.size - got).coerceAtMost(SAMPLE_RATE / 10))
-                                if (n <= 0) break
-                                got += n
-                            }
-                            if (got > 0) pcmChunks.add(tail.copyOf(got))
-                        } catch (_: Exception) {}
-                    }
-                    try { audioRecord?.stop() } catch (_: Exception) {}
-                    try { audioRecord?.release() } catch (_: Exception) {}
-                    audioRecord = null
-                } catch (_: Exception) {}
-                listenJob = null
-            }
-            val chunks = pcmChunks.toList()
-            pcmChunks.clear()
-            val total = chunks.sumOf { it.size }
-            val pcm = if (total > 0) {
-                val arr = ShortArray(total)
-                var o = 0
-                for (c in chunks) {
-                    System.arraycopy(c, 0, arr, o, c.size)
-                    o += c.size
+            try { kotlinx.coroutines.delay(300) } catch (_: Exception) {}
+            try { listenJob?.join() } catch (_: Exception) {}
+            try {
+                audioRecord?.stop()
+                audioRecord?.release()
+            } catch (_: Exception) {}
+            audioRecord = null
+            var finalText = ""
+            try {
+                val r = liveRecognizer
+                if (r != null) {
+                    finalText = VoskEngine.parseText(r.finalResult)
+                    r.close()
                 }
-                arr
-            } else ShortArray(0)
-
-            val (text, engine) = DualAsr.transcribe(this@MainActivity, pcm, SAMPLE_RATE)
+            } catch (_: Exception) {}
+            liveRecognizer = null
+            if (finalText.isBlank()) {
+                // fallback batch
+                val total = pcmChunks.sumOf { it.size }
+                if (total > 0) {
+                    val pcm = ShortArray(total)
+                    var o = 0
+                    for (c in pcmChunks) {
+                        System.arraycopy(c, 0, pcm, o, c.size); o += c.size
+                    }
+                    finalText = DualAsr.transcribe(this@MainActivity, pcm, SAMPLE_RATE).first
+                }
+            }
+            pcmChunks.clear()
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
                 binding.micButton.isEnabled = true
-                if (text.isNotBlank()) {
-                    if (finalText.isNotEmpty()) finalText.append(" ")
-                    finalText.append(text)
-                    binding.resultText.setText(finalText.toString())
-                    binding.resultText.setSelection(binding.resultText.text.length)
-                    binding.status.text = "✓ $text"
+                if (finalText.isNotBlank()) {
+                    binding.resultText.setText(finalText)
+                    binding.resultText.setSelection(finalText.length)
+                    this@MainActivity.finalText.clear()
+                    this@MainActivity.finalText.append(finalText)
+                    binding.status.text = "آماده — Vosk + دیکت"
                 } else {
-                    val sec = total.toFloat() / SAMPLE_RATE
-                    val msg = "چیزی تشخیص داده نشد (${"%.1f".format(sec)}s · $engine)"
-                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                    binding.status.text = msg
+                    binding.status.text = "متنی تشخیص داده نشد"
                 }
-                binding.micButton.postDelayed({
-                    if (!isFinishing && !isDestroyed) {
-                        binding.status.text = "آماده — تایپ با Qwen آفلاین"
-                    }
-                }, 3000)
             }
         }
     }
