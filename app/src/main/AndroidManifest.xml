@@ -41,6 +41,8 @@
             android:label="دیکشنری"
             android:parentActivityName=".MainActivity" />
 
+
+        <!-- Keyboard IME -->
         <service
             android:name=".VoiceInputMethodService"
             android:label="@string/ime_name"
@@ -54,6 +56,7 @@
                 android:resource="@xml/method" />
         </service>
 
+        <!-- System voice dictation / RecognitionService (like Google Voice Typing) -->
         <service
             android:name=".OfflineRecognitionService"
             android:label="تایپ صوتی آفلاین فارسی"

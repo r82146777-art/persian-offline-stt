@@ -11,8 +11,8 @@ android {
         applicationId = "com.persianstt.offline"
         minSdk = 24
         targetSdk = 35
-        versionCode = 100
-        versionName = "5.0.0"
+        versionCode = 101
+        versionName = "5.1.0"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -67,5 +67,6 @@ dependencies {
     implementation(files("libs/sherpa-onnx.aar"))
     implementation("org.apache.commons:commons-compress:1.26.2")
 
-    implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
+    // Offline LLM removed — pure Vosk Grammar only
+    // implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
 }

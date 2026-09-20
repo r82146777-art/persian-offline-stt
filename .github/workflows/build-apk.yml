@@ -56,15 +56,18 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v5.0.0
-          name: "v5.0.0 - Vosk Grammar + دیکت کاربر"
+          tag_name: v5.1.0
+          name: "v5.1.0 - Vosk Grammar استریمینگ + دیکت (بدون AI)"
           body: |
-            ## نسخه ۵.۰.۰
-            * موتور Vosk با Grammar (دایره لغات محدود از دیکت)
-            * مدل vosk-model-small-fa-0.5
-            * صفحه دیکشنری: افزودن کلمه / فایل / حذف
-            * بدون AI بازنویسی‌کننده متن
-            * ایموجی ساده آفلاین
+            ## نسخه ۵.۱.۰
+            * موتور: **Vosk** مستقیم با **Grammar** (دایره لغات محدود)
+            * مدل: vosk-model-small-fa-0.5 از assets یا دانلود
+            * **استریمینگ لحظه‌ای** PartialResult + FinalResult
+            * صفحه **دیکشنری/دیکت**: افزودن کلمه، بارگذاری فایل، حذف
+            * با افزودن کلمه دیکت، Recognizer با لغات جدید ساخته می‌شود
+            * **بدون** هیچ هوش مصنوعی بازنویسی‌کننده متن
+            * ایموجی ساده rule-based (OfflineAi)
+            * کیبورد + تنظیمات صدا/ویبره
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
