@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 from pathlib import Path
+import re
 
 def main():
     p = Path('app/src/main/java/com/persianstt/offline/MainActivity.kt')
     t = p.read_text(encoding='utf-8')
 
-    t = t.replace('WhisperEngine.isReady', 'GrammarVoskEngine.isReady')
-    t = t.replace('WhisperEngine.ensureModel', 'GrammarVoskEngine.ensureModel')
-    t = t.replace('WhisperEngine.release()', 'GrammarVoskEngine.release()')
-    t = t.replace('WhisperEngine.lastError', 'GrammarVoskEngine.lastError')
-    t = t.replace('VoskEngine.isReady', 'GrammarVoskEngine.isReady')
-    t = t.replace('VoskEngine.ensureModel', 'GrammarVoskEngine.ensureModel')
-    t = t.replace('VoskEngine.release()', 'GrammarVoskEngine.release()')
-    t = t.replace('VoskEngine.lastError', 'GrammarVoskEngine.lastError')
-    t = t.replace('VoskEngine.load', 'GrammarVoskEngine.load')
+    # Fix any previous bad double-prefix
+    t = t.replace('GrammarGrammarVoskEngine', 'GrammarVoskEngine')
+
+    # Word-boundary safe renames (do not touch GrammarVoskEngine)
+    def ren(src, dst, text):
+        return re.sub(r'(?<![A-Za-z])' + re.escape(src) + r'(?![A-Za-z])', dst, text)
+
+    t = ren('WhisperEngine', 'GrammarVoskEngine', t)
+    t = ren('VoskEngine', 'GrammarVoskEngine', t)
 
     t = t.replace(
         'مدل سبک Whisper Tiny (~۱۲۰ مگ) دانلود شود؟ بعد می‌توانید Qwen را هم برای تایپ بگیرید.',
@@ -42,9 +43,7 @@ def main():
             R.id.action_settings -> { showSoundSettings(); true }"""
         )
 
-    if 'DictActivity' not in t.split('dictationButton')[0] if 'dictationButton' in t else t:
-        pass
-    if 'startActivity(android.content.Intent(this, DictActivity::class.java))' not in t:
+    if 'DictActivity::class.java' not in t:
         t = t.replace(
             'binding.dictationButton.setOnClickListener { showDictationHelp() }',
             """binding.dictationButton.setOnClickListener { showDictationHelp() }
@@ -55,8 +54,11 @@ def main():
         )
 
     p.write_text(t, encoding='utf-8')
-    print('MainActivity routed to GrammarVoskEngine')
-    print('GrammarVoskEngine.isReady', t.count('GrammarVoskEngine.isReady'))
+    print('patched ok')
+    print('GrammarVoskEngine', t.count('GrammarVoskEngine'))
+    print('GrammarGrammar', t.count('GrammarGrammar'))
+    print('WhisperEngine', t.count('WhisperEngine'))
+    print('bare VoskEngine', len(re.findall(r'(?<![A-Za-z])VoskEngine(?![A-Za-z])', t)))
 
 if __name__ == '__main__':
     main()
