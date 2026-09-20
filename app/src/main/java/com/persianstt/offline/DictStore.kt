@@ -3,10 +3,15 @@ package com.persianstt.offline
 import android.content.Context
 import org.json.JSONArray
 
+/**
+ * ذخیره دیکشنری کاربر در SharedPreferences.
+ * کلمات پیش‌فرض + کلمات کاربر برای Grammar Vosk.
+ */
 object DictStore {
     private const val PREFS = "hamdel_dict"
     private const val KEY_WORDS = "words"
 
+    /** کلمات پایه پرکاربرد فارسی برای شروع */
     private val DEFAULTS = listOf(
         "سلام", "خداحافظ", "بله", "خیر", "نه", "ممنون", "لطفا", "خواهش",
         "من", "تو", "او", "ما", "شما", "آنها", "این", "آن",
@@ -38,6 +43,7 @@ object DictStore {
             } catch (_: Exception) {
                 set.addAll(DEFAULTS)
             }
+            // ensure defaults still present for accuracy
             set.addAll(DEFAULTS)
         }
         if (!set.contains("[unk]")) set.add("[unk]")
