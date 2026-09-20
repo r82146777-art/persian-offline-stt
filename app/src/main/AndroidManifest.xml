@@ -35,7 +35,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Keyboard IME -->
+        <activity
+            android:name=".DictActivity"
+            android:exported="false"
+            android:label="دیکشنری"
+            android:parentActivityName=".MainActivity" />
+
         <service
             android:name=".VoiceInputMethodService"
             android:label="@string/ime_name"
@@ -49,7 +54,6 @@
                 android:resource="@xml/method" />
         </service>
 
-        <!-- System voice dictation / RecognitionService (like Google Voice Typing) -->
         <service
             android:name=".OfflineRecognitionService"
             android:label="تایپ صوتی آفلاین فارسی"

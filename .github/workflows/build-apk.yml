@@ -37,9 +37,8 @@ jobs:
           mkdir -p app/libs
           curl -L --fail -o app/libs/sherpa-onnx.aar \
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar" || true
-          ls -lh app/libs/ || true
 
-      - name: Apply Vosk-only MainActivity patch
+      - name: Apply Grammar-Vosk MainActivity patch
         run: python3 scripts/apply_v4_vosk.py
 
       - name: Generate wrapper and build debug APK
@@ -57,14 +56,15 @@ jobs:
       - name: Create or update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v4.0.1
-          name: "v4.0.1 - Vosk پایدار + کیبورد + تنظیمات + ایموجی"
+          tag_name: v5.0.0
+          name: "v5.0.0 - Vosk Grammar + دیکت کاربر (بدون AI خراب‌کننده)"
           body: |
-            ## نسخه ۴.۰.۱
-            * موتور تشخیص: **Vosk آفلاین** (پایدار مثل نسخه ۱.۲)
-            * کیبورد سیستم + تنظیمات صدا/ویبره + ایموجی
-            * توقف خودکار با سکوت
-            * منو: راهنما، درباره ما، کانال
+            ## نسخه ۵.۰.۰
+            * موتور: **Vosk** با **Grammar** (دایره لغات محدود)
+            * مدل: vosk-model-small-fa-0.5
+            * صفحه دیکشنری/دیکت
+            * بدون هوش مصنوعی بازنویسی متن
+            * ایموجی ساده آفلاین
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
