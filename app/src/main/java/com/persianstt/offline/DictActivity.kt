@@ -15,6 +15,10 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
+/**
+ * مدیریت دیکشنری کاربر برای Grammar Vosk.
+ * افزودن کلمه / بارگذاری فایل متنی / حذف
+ */
 class DictActivity : AppCompatActivity() {
 
     private lateinit var listView: ListView
