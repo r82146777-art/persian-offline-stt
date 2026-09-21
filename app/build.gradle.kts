@@ -67,7 +67,4 @@ dependencies {
 
     implementation(files("libs/sherpa-onnx.aar"))
     implementation("org.apache.commons:commons-compress:1.26.2")
-
-    // Real offline LLM package (llama.cpp) + download Qwen2.5-0.5B GGUF
-    implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
 }
