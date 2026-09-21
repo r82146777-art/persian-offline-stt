@@ -192,6 +192,8 @@ object OfflineAi {
     )
 
 
+    fun addEmojisSpecialized(text: String): String = addEmojis(text)
+
     fun addEmojis(text: String): String {
         if (text.isBlank()) return "😊"
         var t = text.trim()
@@ -211,94 +213,3 @@ object OfflineAi {
     }
 
 
-    /** Rich contextual emoji placement throughout the sentence. */
-    fun addEmojisSpecialized(input: String): String {
-        if (input.isBlank()) return input
-        var t = input.trim()
-        // phrase-level first (longest match)
-        val rules = listOf(
-            listOf("عرض سلام و ادب و احترام", "عرض سلام و ادب", "عرض ادب و احترام") to "🙇",
-            listOf("صبح بخیر", "صبح‌بخیر") to "☀️",
-            listOf("ظهر بخیر", "ظهر‌بخیر") to "🌤️",
-            listOf("عصر بخیر", "عصر‌بخیر") to "🌇",
-            listOf("شب بخیر", "شب‌بخیر") to "🌙",
-            listOf("خسته نباشید", "خسته نباشی", "خدا قوت", "خداقوت") to "💪",
-            listOf("دوستت دارم", "عاشقتم") to "❤️",
-            listOf("تولدت مبارک", "تولدت") to "🎂",
-            listOf("سال نو مبارک", "عید مبارک") to "🎆",
-            listOf("رمضان مبارک") to "🌙",
-            listOf("ممنونم", "ممنون", "متشکرم", "مرسی", "تشکر", "سپاس") to "🙏",
-            listOf("خداحافظ", "بدرود", "فعلا") to "👋",
-            listOf("سلام علیکم", "سلام", "درود") to "👋",
-            listOf("تبریک", "مبارک", "پیروزی") to "🎉",
-            listOf("ببخشید", "شرمنده", "متاسفم", "معذرت") to "🙏",
-            listOf("خنده", "جوک", "بامزه") to "😂",
-            listOf("ناراحت", "غمگین", "گریه") to "😢",
-            listOf("عصبانی", "خشمگین") to "😠",
-            listOf("عالی", "عالیه", "فوق‌العاده", "فوق العاده", "محشر") to "✨",
-            listOf("خوب", "خوبه", "خوشحال", "شاد") to "😊",
-            listOf("باران", "بارونی") to "🌧️",
-            listOf("برف") to "❄️",
-            listOf("آفتاب", "آفتابی") to "☀️",
-            listOf("چای", "قهوه") to "☕",
-            listOf("غذا", "ناهار", "شام", "صبحانه") to "🍽️",
-            listOf("ماشین", "اتوبوس", "مترو", "تاکسی") to "🚗",
-            listOf("هواپیما", "پرواز") to "✈️",
-            listOf("خانه", "منزل") to "🏠",
-            listOf("مدرسه", "دانشگاه") to "📚",
-            listOf("کتاب") to "📖",
-            listOf("فوتبال", "ورزش") to "⚽",
-            listOf("موسیقی", "آهنگ") to "🎵",
-            listOf("فیلم", "سینما") to "🎬",
-            listOf("تلفن", "گوشی") to "📱",
-            listOf("پول", "قیمت") to "💰",
-            listOf("عشق", "عاشق") to "💕",
-            listOf("خدا", "دعا", "آمین") to "🤲",
-            listOf("ایران", "تهران") to "🇮🇷",
-            listOf("بله", "آره") to "✅",
-            listOf("نه", "نخیر") to "❌",
-            listOf("لطفا", "لطفاً") to "🙏",
-            listOf("کار", "شغل") to "💼",
-            listOf("خواب", "خسته") to "😴",
-            listOf("بیمار", "درد", "دکتر") to "🏥",
-            listOf("گل") to "🌸",
-            listOf("قلب") to "❤️",
-            listOf("آتش") to "🔥",
-            listOf("ستاره") to "⭐",
-            listOf("ماه") to "🌙",
-            listOf("دریا") to "🌊",
-            listOf("کوه") to "⛰️"
-        )
-        val used = mutableSetOf<String>()
-        for ((keys, emoji) in rules) {
-            for (k in keys.sortedByDescending { it.length }) {
-                if (t.contains(k) && emoji !in used) {
-                    // insert emoji after the phrase once
-                    t = t.replaceFirst(k, "$k $emoji")
-                    used.add(emoji)
-                    break
-                }
-            }
-        }
-        // word-level single tokens without emoji yet
-        val wordMap = mapOf(
-            "سلام" to "👋", "درود" to "👋", "ممنون" to "🙏", "متشکرم" to "🙏",
-            "عالی" to "✨", "خوب" to "😊", "بله" to "✅", "نه" to "❌"
-        )
-        val parts = t.split(Regex("(\\s+)"))
-        val rebuilt = StringBuilder()
-        for (p in parts) {
-            val core = p.trim()
-            if (core in wordMap && wordMap[core] !in used && !p.contains(wordMap[core]!!)) {
-                rebuilt.append(p).append(" ").append(wordMap[core])
-                used.add(wordMap[core]!!)
-            } else {
-                rebuilt.append(p)
-            }
-        }
-        t = rebuilt.toString().replace(Regex("\\s+"), " ").trim()
-        if (used.isEmpty()) t = "$t ✨"
-        return t
-    }
-
-}

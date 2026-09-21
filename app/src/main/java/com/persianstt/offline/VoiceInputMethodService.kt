@@ -624,7 +624,7 @@ class VoiceInputMethodService : InputMethodService() {
             val buf = ShortArray(session.bufferShorts)
             var speechSeen = false
             var silentFrames = 0
-            val silenceLimit = 18 // ~1.8s silence after speech → auto stop (Google-like)
+            val silenceLimit = 14 // ~1.4s silence after speech → auto stop (Google-like)
             val energyThr = 750
             while (isActive && isListening) {
                 val n = audioRecord?.read(buf, 0, buf.size) ?: -1
