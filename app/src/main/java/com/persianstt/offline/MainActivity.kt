@@ -567,6 +567,28 @@ override fun onCreate(savedInstanceState: Bundle?) {
     }
 
 
+    private fun setupKeyboardFlow() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("فعال‌سازی کیبورد")
+            .setMessage(
+                "۱) در تنظیمات، کیبورد «تایپ آفلاین» را فعال کنید.\n" +
+                "۲) سپس در کادر متن این کیبورد را انتخاب کنید."
+            )
+            .setPositiveButton("تنظیمات کیبورد") { _, _ ->
+                try {
+                    startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+                } catch (_: Exception) {}
+            }
+            .setNeutralButton("انتخاب کیبورد") { _, _ ->
+                try {
+                    val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.showInputMethodPicker()
+                } catch (_: Exception) {}
+            }
+            .setNegativeButton("بستن", null)
+            .show()
+    }
+
     override fun onDestroy() {
         try { stopListening() } catch (_: Exception) {}
         try { VoskEngine.release() } catch (_: Exception) {}
