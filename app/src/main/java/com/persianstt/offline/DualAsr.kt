@@ -3,8 +3,10 @@ package com.persianstt.offline
 import android.content.Context
 
 /**
- * Vosk STT with forced 16 kHz mono pipeline.
- * Always resample + preprocess before model (fixes hallucination).
+ * Hybrid STT:
+ * 1) 16 kHz mono audio pipeline
+ * 2) Free Vosk (full vocabulary)
+ * 3) Dictionary only as soft correction (does not overwrite good engine words)
  */
 object DualAsr {
     fun transcribe(context: Context, pcm: ShortArray, sampleRate: Int = 16000): Pair<String, String> {
@@ -14,8 +16,10 @@ object DualAsr {
         val prepared = AudioPreprocessor.prepare(pcm, sampleRate)
         if (prepared.size < 16000 / 8) return "" to "کوتاه"
 
-        val text = VoskEngine.transcribe(context, prepared, 16000)
+        var text = VoskEngine.transcribe(context, prepared, 16000)
         if (text.isBlank()) return "" to VoskEngine.lastError.ifBlank { "بدون‌متن" }
-        return text to "Vosk+16k"
+
+        text = HybridCorrector.improve(context, text)
+        return text to "Vosk+دیکت"
     }
 }

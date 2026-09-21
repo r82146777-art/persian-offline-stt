@@ -225,23 +225,21 @@ object VoskEngine {
         }
     }
 
-    /** Create recognizer with current grammar from DictionaryStore. */
+    /**
+     * Free-vocabulary recognizer (full model).
+     * Dictionary is applied later via HybridCorrector — not as hard grammar
+     * (grammar-only mode was destroying normal Persian words).
+     */
     @Synchronized
     fun createRecognizer(context: Context): Recognizer? {
         if (!load(context)) return null
         val m = model ?: return null
-        val grammar = DictionaryStore.grammarJson(context)
-        grammarSnapshot = grammar
         return try {
-            Recognizer(m, 16000.0f, grammar)
+            Recognizer(m, 16000.0f)
         } catch (e: Exception) {
-            Log.e(TAG, "grammar recognizer fail, free mode", e)
-            try {
-                Recognizer(m, 16000.0f)
-            } catch (e2: Exception) {
-                lastError = e2.message ?: "Recognizer"
-                null
-            }
+            lastError = e.message ?: "Recognizer"
+            Log.e(TAG, "recognizer", e)
+            null
         }
     }
 

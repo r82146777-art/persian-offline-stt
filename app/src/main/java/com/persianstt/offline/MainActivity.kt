@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity() {
                 val n = DictionaryStore.importFromUri(this, uri)
                 VoskEngine.resetGrammar(this)
                 Toast.makeText(this, "$n واژه از فایل اضافه شد", Toast.LENGTH_SHORT).show()
-                binding.status.text = "آماده — Vosk + دیکت (${DictionaryStore.allWords(this).size} واژه)"
+                binding.status.text = "آماده — Vosk ترکیبی (${DictionaryStore.allWords(this).size} واژه)"
             } catch (e: Exception) {
                 Toast.makeText(this, "خطای فایل: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -177,30 +177,73 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
 
     private fun showDictDialog() {
+        val count = DictionaryStore.userCount(this)
+        val total = DictionaryStore.allWords(this).size
+        val items = arrayOf(
+            "افزودن کلمه / عبارت",
+            "وارد کردن فایل دیکت (.txt)",
+            "صدور واژگان (اشتراک / تلگرام / …)",
+            "حذف دیکت‌های اضافه‌شده ($count واژه)",
+            "بستن"
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle("مدیریت دیکت — کاربر: $count | کل: $total")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> showAddWordDialog()
+                    1 -> {
+                        try {
+                            dictFileLauncher.launch(arrayOf("text/plain", "text/*", "*/*"))
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "خطا: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    2 -> {
+                        if (count == 0) {
+                            Toast.makeText(this, "واژهٔ کاربر برای صدور نیست", Toast.LENGTH_SHORT).show()
+                        } else {
+                            try {
+                                DictionaryStore.shareExport(this)
+                            } catch (e: Exception) {
+                                Toast.makeText(this, "خطای صدور: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    3 -> {
+                        MaterialAlertDialogBuilder(this)
+                            .setTitle("حذف دیکت کاربر؟")
+                            .setMessage("فقط واژه‌های اضافه‌شده پاک می‌شوند. واژه‌های پیش‌فرض برنامه می‌مانند.")
+                            .setPositiveButton("حذف") { _, _ ->
+                                DictionaryStore.clearUser(this)
+                                VoskEngine.resetGrammar(this)
+                                Toast.makeText(this, "دیکت کاربر حذف شد", Toast.LENGTH_SHORT).show()
+                                binding.status.text = "آماده — Vosk ترکیبی (${DictionaryStore.allWords(this).size} واژه)"
+                            }
+                            .setNegativeButton("انصراف", null)
+                            .show()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun showAddWordDialog() {
         val input = android.widget.EditText(this).apply {
-            hint = "کلمه یا عبارت جدید"
+            hint = "کلمه یا عبارت (هر خط یک مورد)"
             setSingleLine(false)
-            minLines = 2
+            minLines = 3
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("افزودن به دیکت (${DictionaryStore.allWords(this).size} واژه)")
-            .setMessage("کلمه بنویسید یا از منوی زیر فایل متنی وارد کنید.")
+            .setTitle("افزودن به دیکت")
             .setView(input)
-            .setPositiveButton("افزودن") { _, _ ->
+            .setPositiveButton("ذخیره") { _, _ ->
                 val w = input.text?.toString().orEmpty()
                 w.split(Regex("[\n,;]+")).forEach { DictionaryStore.addWord(this, it) }
                 VoskEngine.resetGrammar(this)
-                Toast.makeText(this, "دیکت به‌روز شد — موتور ریست شد", Toast.LENGTH_SHORT).show()
-                binding.status.text = "آماده — Vosk + دیکت (${DictionaryStore.allWords(this).size} واژه)"
+                Toast.makeText(this, "ذخیره شد", Toast.LENGTH_SHORT).show()
+                binding.status.text = "آماده — Vosk ترکیبی (${DictionaryStore.allWords(this).size} واژه)"
             }
-            .setNeutralButton("فایل متنی") { _, _ ->
-                try {
-                    dictFileLauncher.launch(arrayOf("text/plain", "text/*"))
-                } catch (e: Exception) {
-                    Toast.makeText(this, "خطا: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("بستن", null)
+            .setNegativeButton("انصراف", null)
             .show()
     }
 
@@ -278,7 +321,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
     private fun prepareModel() {
         try {
             if (VoskEngine.isReady(this)) {
-                binding.status.text = "آماده — Vosk + دیکت (${DictionaryStore.allWords(this).size} واژه)"
+                binding.status.text = "آماده — Vosk ترکیبی (${DictionaryStore.allWords(this).size} واژه)"
                 binding.micButton.isEnabled = true
                 Thread {
                     try { VoskEngine.load(this@MainActivity) } catch (_: Exception) {}
@@ -327,7 +370,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     withContext(Dispatchers.IO) {
                         try { VoskEngine.load(this@MainActivity) } catch (_: Exception) {}
                     }
-                    binding.status.text = "آماده — Vosk + دیکت"
+                    binding.status.text = "آماده — Vosk ترکیبی"
                     binding.micButton.isEnabled = true
                 } else {
                     binding.status.text = "خطا: ${VoskEngine.lastError}"
@@ -443,6 +486,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     r.close()
                 }
             } catch (_: Exception) {}
+            if (finalText.isNotBlank()) {
+                finalText = HybridCorrector.improve(this@MainActivity, finalText)
+            }
             liveRecognizer = null
             if (finalText.isBlank()) {
                 // fallback batch
@@ -465,7 +511,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     binding.resultText.setSelection(finalText.length)
                     this@MainActivity.finalText.clear()
                     this@MainActivity.finalText.append(finalText)
-                    binding.status.text = "آماده — Vosk + دیکت"
+                    binding.status.text = "آماده — Vosk ترکیبی"
                 } else {
                     binding.status.text = "متنی تشخیص داده نشد"
                 }
