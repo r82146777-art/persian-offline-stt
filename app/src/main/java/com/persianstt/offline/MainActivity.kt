@@ -566,10 +566,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
     }
 
+
     override fun onDestroy() {
-        stopListening()
-        VoskEngine.release()
-        
+        try { stopListening() } catch (_: Exception) {}
+        try { VoskEngine.release() } catch (_: Exception) {}
         super.onDestroy()
     }
 
@@ -578,65 +578,18 @@ override fun onCreate(savedInstanceState: Bundle?) {
             .setTitle("دیکته صوتی (سیستم)")
             .setMessage(
                 "برای دیکته در واتساپ، پیام‌رسان و هر برنامه:\n\n" +
-                "۱) تنظیمات گوشی → زبان و ورودی / سیستم\n" +
-                "۲) تشخیص گفتار / Speech services\n" +
+                "۱) تنظیمات گوشی → زبان و ورودی\n" +
+                "۲) تشخیص گفتار / Speech\n" +
                 "۳) «Vosk آفلاین فارسی» را انتخاب کنید\n\n" +
-                "مجوز میکروفون باید داده شده باشد.\n" +
-                "داخل خود این برنامه هم دکمه میکروفون = Vosk آفلاین است."
+                "مجوز میکروفون باید داده شده باشد."
             )
             .setPositiveButton("باز کردن تنظیمات") { _, _ ->
                 try {
                     startActivity(Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS))
-                } catch (_: Exception) {
-                    try {
-                        startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
-                    } catch (_: Exception) {}
-                }
+                } catch (_: Exception) {}
             }
-            .setNegativeButton("باشه", null)
+            .setNegativeButton("بستن", null)
             .show()
-    }
-
-    private fun openVoiceInputSettings() {
-        val attempts = listOf(
-            Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
-            Intent("android.settings.VOICE_INPUT_SETTINGS"),
-            Intent(Settings.ACTION_INPUT_METHOD_SETTINGS),
-            Intent(Settings.ACTION_SETTINGS)
-        )
-        for (intent in attempts) {
-            try {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
-                return
-            } catch (_: Exception) {}
-        }
-        android.widget.Toast.makeText(
-            this,
-            "تنظیمات پیدا نشد. دستی بروید: تنظیمات ← زبان ← ورودی صوتی",
-            android.widget.Toast.LENGTH_LONG
-        ).show()
-    }
-
-
-    /** Enable IME + pick it + try show keyboard on edit fields. */
-    private fun setupKeyboardFlow() {
-        try {
-            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
-        } catch (_: Exception) {
-            openVoiceInputSettings()
-        }
-        Toast.makeText(
-            this,
-            "۱) کیبورد این برنامه را روشن کنید\n۲) در پنجره بعد آن را انتخاب کنید",
-            Toast.LENGTH_LONG
-        ).show()
-        binding.root.postDelayed({
-            try {
-                val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.showInputMethodPicker()
-            } catch (_: Exception) {}
-        }, 1500)
     }
 
     private fun tryShowKeyboard() {
@@ -649,18 +602,12 @@ override fun onCreate(savedInstanceState: Bundle?) {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            // after returning from IME settings, offer picker once
             binding.root.postDelayed({
                 if (isFinishing || isDestroyed) return@postDelayed
                 try {
                     val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-                    val enabled = imm.enabledInputMethodList.any {
-                        it.packageName == packageName
-                    }
-                    if (enabled) {
-                        // soft show on our field
-                        tryShowKeyboard()
-                    }
+                    val enabled = imm.enabledInputMethodList.any { it.packageName == packageName }
+                    if (enabled) tryShowKeyboard()
                 } catch (_: Exception) {}
             }, 400)
         }
@@ -670,17 +617,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            android.widget.Toast.makeText(this, "مجوز میکروفون از قبل داده شده", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        androidx.core.app.ActivityCompat.requestPermissions(
+        ActivityCompat.requestPermissions(
             this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC
         )
-    }
-
-    override fun onDestroy() {
-        try { stopListening() } catch (_: Exception) {}
-        try { VoskEngine.release() } catch (_: Exception) {}
-        super.onDestroy()
     }
 }
