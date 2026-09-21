@@ -675,4 +675,12 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
         androidx.core.app.ActivityCompat.requestPermissions(
             this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC
-        
+        )
+    }
+
+    override fun onDestroy() {
+        try { stopListening() } catch (_: Exception) {}
+        try { VoskEngine.release() } catch (_: Exception) {}
+        super.onDestroy()
+    }
+}

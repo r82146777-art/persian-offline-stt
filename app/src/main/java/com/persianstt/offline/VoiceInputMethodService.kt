@@ -52,6 +52,7 @@ class VoiceInputMethodService : InputMethodService() {
     private var vibrator: Vibrator? = null
     private var clipboardManager: ClipboardManager? = null
     private lateinit var prefs: SharedPreferences
+    private var lastCommitted: String = ""
 
     companion object {
         private const val SAMPLE_RATE = 16000
