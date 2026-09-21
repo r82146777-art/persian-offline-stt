@@ -211,5 +211,4 @@ object OfflineAi {
         if (used.isEmpty()) t = "$t ✨"
         return t.replace(Regex("\\s+"), " ").trim()
     }
-
-
+}
