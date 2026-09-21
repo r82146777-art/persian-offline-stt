@@ -57,7 +57,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v4.3.0
-          name: "v4.3.0 - emoji rules, Gboard key size, 8 sounds, auto-stop ding"
+          name: "v4.3.0 - Gboard-size keys, specialized emoji, real key sounds, auto-stop ding"
           body: |
             ## نسخه ۳.۱۶.۰
             * موتور تشخیص: Vosk آفلاین

@@ -253,7 +253,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
             Toast.makeText(this, "متنی نیست", Toast.LENGTH_SHORT).show()
             return
         }
-        val enriched = OfflineAi.addEmojis(current)
+        val enriched = OfflineAi.addEmojisSpecialized(current)
         finalText.clear(); finalText.append(enriched)
         binding.resultText.setText(enriched)
         binding.resultText.setSelection(enriched.length)

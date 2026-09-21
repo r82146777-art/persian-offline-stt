@@ -56,7 +56,7 @@ class VoiceInputMethodService : InputMethodService() {
     companion object {
         private const val SAMPLE_RATE = 16000
         private const val LONG_PRESS_MS = 550L
-        private const val KEY_H_DP = 54 // Gboard-like medium height
+        private const val KEY_H_DP = 52 // Gboard-like medium (letters+numbers+symbols)
         private const val PREFS = "hamdel_stt"
         private const val KEY_CLIPBOARD = "clipboard_history"
         private const val MAX_CLIPS = 20
@@ -150,7 +150,8 @@ class VoiceInputMethodService : InputMethodService() {
         val micBtn = tbBtn("🎤") {
             if (!isListening) startVoice() else stopVoice()
         }
-        micBtn.contentDescription = "تایپ صوتی"
+        micBtn.contentDescription = "تایپ صوتی آفلاین"
+        micBtn.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         micBtn.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         toolbar.addView(micBtn)
         toolbar.addView(tbBtn("✏️") { editLastCommitted() })
@@ -473,12 +474,12 @@ class VoiceInputMethodService : InputMethodService() {
 
     private fun keyH(): Int {
         val d = resources.displayMetrics.density
-        return (KEY_H_DP * d).toInt().coerceIn(48, 72)
+        return (KEY_H_DP * d).toInt().coerceIn(46, 64)
     }
 
     private fun makeKey(label: String, w: Float, special: Boolean = false, onTap: () -> Unit) = Button(this).apply {
         text = label
-        textSize = if (label.length > 3) 16f else if (label.length > 1) 19f else 22f
+        textSize = if (label.length > 3) 15f else if (label.length > 1) 18f else 20f
         setTextColor(TEXT)
         setBackgroundColor(if (special) KEY_BG_SP else KEY_BG)
         isAllCaps = false
@@ -497,7 +498,7 @@ class VoiceInputMethodService : InputMethodService() {
         }
         // prevent Button class name being appended in some TalkBack modes
         stateListAnimator = null
-        layoutParams = LinearLayout.LayoutParams(0, keyH(), w).apply { setMargins(2, 2, 2, 2) }
+        layoutParams = LinearLayout.LayoutParams(0, keyH(), w).apply { setMargins(3, 3, 3, 3) }
         setOnClickListener { onTap(); playClick() }
         val variants = letterVariants[label.lowercase()] ?: letterVariants[label]
         if (variants != null && variants.size > 1) {
@@ -542,45 +543,38 @@ class VoiceInputMethodService : InputMethodService() {
 
     private fun playClick() {
         try {
-            val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
             if (!prefs.getBoolean("key_sound", true)) return
-            val vol = prefs.getInt("sound_volume", 60)
+            val vol = prefs.getInt("sound_volume", 70)
             val effect = prefs.getInt("sound_effect", 0)
             KeySoundPlayer.play(this, effect, vol)
         } catch (_: Exception) {}
     }
 
-
-    private var lastCommitted: String = ""
-
     private fun insertSmartEmoji() {
         val ic = currentInputConnection ?: return
-        val base = try {
-            ic.getTextBeforeCursor(200, 0)?.toString().orEmpty()
+        val before = try {
+            ic.getTextBeforeCursor(400, 0)?.toString().orEmpty()
         } catch (_: Exception) { "" }
-        val source = base.ifBlank { lastCommitted }
+        val after = try {
+            ic.getTextAfterCursor(80, 0)?.toString().orEmpty()
+        } catch (_: Exception) { "" }
+        val source = before.ifBlank { lastCommitted }
         if (source.isBlank()) {
             try { ic.commitText("😊", 1) } catch (_: Exception) {}
             playClick()
             return
         }
-        val enriched = OfflineAi.addEmojis(source.trim())
+        val enriched = OfflineAi.addEmojisSpecialized(source.trim())
         try {
-            // replace surrounding context with emoji-enriched text when it matches
-            val trim = source.trim()
-            if (base.trim().endsWith(trim) || base.trim() == trim) {
-                ic.deleteSurroundingText(trim.length, 0)
-                ic.commitText(enriched, 1)
-            } else {
-                val extra = enriched.removePrefix(trim).trim()
-                ic.commitText(if (extra.isNotBlank()) " $extra" else " ✨", 1)
-            }
+            val del = minOf(source.length, before.length)
+            if (del > 0) ic.deleteSurroundingText(del, 0)
+            ic.commitText(enriched + after, 1)
+            // move cursor before "after" if needed — commitText already places at end
         } catch (_: Exception) {
             try { ic.commitText(" 😊", 1) } catch (_: Exception) {}
         }
-        lastCommitted = enriched
-        statusView?.text = "ایموجی تخصصی"
         playClick()
+        statusView?.text = "ایموجی تخصصی اعمال شد"
     }
 
     private fun editLastCommitted() {
