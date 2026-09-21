@@ -56,7 +56,7 @@ class VoiceInputMethodService : InputMethodService() {
     companion object {
         private const val SAMPLE_RATE = 16000
         private const val LONG_PRESS_MS = 550L
-        private const val KEY_H = 128 // taller keys like Gboard
+        private const val KEY_H_DP = 54 // Gboard-like medium height
         private const val PREFS = "hamdel_stt"
         private const val KEY_CLIPBOARD = "clipboard_history"
         private const val MAX_CLIPS = 20
@@ -147,7 +147,12 @@ class VoiceInputMethodService : InputMethodService() {
             setPadding(4, 2, 4, 4)
         }
         toolbar.addView(tbBtn("📋") { toggleClipboard() })
-        toolbar.addView(tbBtn("🎤") { if (!isListening) startVoice() else stopVoice() })
+        val micBtn = tbBtn("🎤") {
+            if (!isListening) startVoice() else stopVoice()
+        }
+        micBtn.contentDescription = "تایپ صوتی"
+        micBtn.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        toolbar.addView(micBtn)
         toolbar.addView(tbBtn("✏️") { editLastCommitted() })
         toolbar.addView(tbBtn("😊") { insertSmartEmoji() })
         toolbar.addView(tbBtn("⌫") { deleteLast() })
@@ -357,21 +362,21 @@ class VoiceInputMethodService : InputMethodService() {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.2f)
         }
         right.addView(makeKey("⌫", 1f, true) { deleteLast() }.also {
-            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, KEY_H).apply { setMargins(3, 3, 3, 3) }
+            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(3, 3, 3, 3) }
         })
         right.addView(makeKey("فا", 1f, true) {
             currentLayer = 0; rebuildKeys()
         }.also {
-            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, KEY_H).apply { setMargins(3, 3, 3, 3) }
+            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(3, 3, 3, 3) }
         })
         right.addView(makeKey("فاصله", 1f, true) { commitText(" ") }.also {
-            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, KEY_H).apply { setMargins(3, 3, 3, 3) }
+            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(3, 3, 3, 3) }
         })
         right.addView(makeKey("↵", 1f, true) {
             currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
         }.also {
-            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, KEY_H).apply { setMargins(3, 3, 3, 3) }
+            it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(3, 3, 3, 3) }
         })
 
         outer.addView(left)
@@ -444,7 +449,7 @@ class VoiceInputMethodService : InputMethodService() {
                     commitText(v)
                     popup.dismiss()
                 }.also { b ->
-                    b.layoutParams = LinearLayout.LayoutParams(96, KEY_H).apply { setMargins(4, 0, 4, 0) }
+                    b.layoutParams = LinearLayout.LayoutParams(96, keyH()).apply { setMargins(4, 0, 4, 0) }
                 })
             }
             popup.contentView = box
@@ -466,9 +471,14 @@ class VoiceInputMethodService : InputMethodService() {
         } catch (_: Exception) {}
     }
 
+    private fun keyH(): Int {
+        val d = resources.displayMetrics.density
+        return (KEY_H_DP * d).toInt().coerceIn(48, 72)
+    }
+
     private fun makeKey(label: String, w: Float, special: Boolean = false, onTap: () -> Unit) = Button(this).apply {
         text = label
-        textSize = if (label.length > 2) 15f else 20f
+        textSize = if (label.length > 3) 16f else if (label.length > 1) 19f else 22f
         setTextColor(TEXT)
         setBackgroundColor(if (special) KEY_BG_SP else KEY_BG)
         isAllCaps = false
@@ -487,7 +497,7 @@ class VoiceInputMethodService : InputMethodService() {
         }
         // prevent Button class name being appended in some TalkBack modes
         stateListAnimator = null
-        layoutParams = LinearLayout.LayoutParams(0, KEY_H, w).apply { setMargins(2, 2, 2, 2) }
+        layoutParams = LinearLayout.LayoutParams(0, keyH(), w).apply { setMargins(2, 2, 2, 2) }
         setOnClickListener { onTap(); playClick() }
         val variants = letterVariants[label.lowercase()] ?: letterVariants[label]
         if (variants != null && variants.size > 1) {
@@ -531,58 +541,46 @@ class VoiceInputMethodService : InputMethodService() {
     private fun deleteLast() { currentInputConnection?.deleteSurroundingText(1, 0) }
 
     private fun playClick() {
-        if (prefs.getBoolean("key_sound", true)) {
+        try {
+            val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+            if (!prefs.getBoolean("key_sound", true)) return
             val vol = prefs.getInt("sound_volume", 60)
             val effect = prefs.getInt("sound_effect", 0)
             KeySoundPlayer.play(this, effect, vol)
-        }
-        if (prefs.getBoolean("key_vibe", true)) try {
-            val strength = prefs.getInt("vibe_strength", 60).coerceIn(10, 100)
-            val ms = 10L + (strength / 10)
-            if (android.os.Build.VERSION.SDK_INT >= 26)
-                vibrator?.vibrate(VibrationEffect.createOneShot(ms, (255 * strength / 100).coerceIn(1, 255)))
-            else { @Suppress("DEPRECATION") vibrator?.vibrate(ms) }
         } catch (_: Exception) {}
     }
+
 
     private var lastCommitted: String = ""
 
     private fun insertSmartEmoji() {
-        val base = lastCommitted.ifBlank {
-            try {
-                currentInputConnection?.getTextBeforeCursor(120, 0)?.toString() ?: ""
-            } catch (_: Exception) { "" }
-        }
-        if (base.isBlank()) {
-            commitText("😊")
+        val ic = currentInputConnection ?: return
+        val base = try {
+            ic.getTextBeforeCursor(200, 0)?.toString().orEmpty()
+        } catch (_: Exception) { "" }
+        val source = base.ifBlank { lastCommitted }
+        if (source.isBlank()) {
+            try { ic.commitText("😊", 1) } catch (_: Exception) {}
+            playClick()
             return
         }
-        statusView?.text = "ایموجی هوشمند…"
-        scope.launch(Dispatchers.IO) {
-            val enriched = try {
-                kotlinx.coroutines.runBlocking {
-                    OfflineLlm.addEmojis(this@VoiceInputMethodService, base.trim())
-                }
-            } catch (_: Exception) { "" }.ifBlank { OfflineAi.addEmojis(base.trim()) }
-            withContext(Dispatchers.Main) {
-                val ic = currentInputConnection ?: return@withContext
-                try {
-                    val before = ic.getTextBeforeCursor(base.length + 5, 0)?.toString() ?: ""
-                    if (before.endsWith(base.trim())) {
-                        ic.deleteSurroundingText(base.trim().length, 0)
-                        ic.commitText(enriched, 1)
-                    } else {
-                        val extra = enriched.removePrefix(base.trim()).trim()
-                        if (extra.isNotBlank()) ic.commitText(" $extra", 1)
-                        else ic.commitText(enriched, 1)
-                    }
-                } catch (_: Exception) {
-                    commitText(" ✨")
-                }
-                lastCommitted = enriched
-                statusView?.text = "ایموجی AI آفلاین"
+        val enriched = OfflineAi.addEmojis(source.trim())
+        try {
+            // replace surrounding context with emoji-enriched text when it matches
+            val trim = source.trim()
+            if (base.trim().endsWith(trim) || base.trim() == trim) {
+                ic.deleteSurroundingText(trim.length, 0)
+                ic.commitText(enriched, 1)
+            } else {
+                val extra = enriched.removePrefix(trim).trim()
+                ic.commitText(if (extra.isNotBlank()) " $extra" else " ✨", 1)
             }
+        } catch (_: Exception) {
+            try { ic.commitText(" 😊", 1) } catch (_: Exception) {}
         }
+        lastCommitted = enriched
+        statusView?.text = "ایموجی تخصصی"
+        playClick()
     }
 
     private fun editLastCommitted() {
@@ -632,8 +630,8 @@ class VoiceInputMethodService : InputMethodService() {
             val buf = ShortArray(session.bufferShorts)
             var speechSeen = false
             var silentFrames = 0
-            val silenceLimit = 12 // ~1.2s silence after speech → auto stop
-            val energyThr = 900
+            val silenceLimit = 18 // ~1.8s silence after speech → auto stop (Google-like)
+            val energyThr = 750
             while (isActive && isListening) {
                 val n = audioRecord?.read(buf, 0, buf.size) ?: -1
                 if (n <= 0) continue
@@ -651,8 +649,8 @@ class VoiceInputMethodService : InputMethodService() {
                     if (silentFrames >= silenceLimit) {
                         // auto-stop like Google
                         withContext(Dispatchers.Main) {
-                            try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 100) } catch (_: Exception) {}
-                            statusView?.text = "توقف خودکار…"
+                            try { KeySoundPlayer.playDing(75) } catch (_: Exception) {}
+                            statusView?.text = "⏹ توقف خودکار"
                             stopVoice()
                         }
                         break
@@ -666,7 +664,7 @@ class VoiceInputMethodService : InputMethodService() {
         synchronized(stopLock) {
             if (!isListening) return
         }
-        try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 60) } catch (_: Exception) {}
+        try { KeySoundPlayer.playDing(65) } catch (_: Exception) {}
         statusView?.text = "در حال تشخیص…"
         scope.launch(Dispatchers.IO) {
             try { kotlinx.coroutines.delay(500) } catch (_: Exception) {}

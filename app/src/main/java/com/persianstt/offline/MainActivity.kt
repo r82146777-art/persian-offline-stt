@@ -265,7 +265,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
         val vibeOn = prefs.getBoolean(KEY_VIBE, true)
         val volume = prefs.getInt("sound_volume", 60)
         val effect = prefs.getInt("sound_effect", 0)
-        val effectNames = arrayOf("کلیک سامسونگ", "تیک نرم", "پاپ", "شاتر دوربین", "گیتار")
+        val effectNames = KeySoundPlayer.EFFECT_NAMES
         val status = buildString {
             append("صدا: "); append(if (soundOn) "روشن" else "خاموش")
             append("  |  ویبره: "); append(if (vibeOn) "روشن" else "خاموش")
@@ -421,10 +421,33 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 val frameSize = session.bufferShorts
                 listenJob = lifecycleScope.launch(Dispatchers.IO) {
                     val buf = ShortArray(frameSize)
+                    var speechSeen = false
+                    var silentFrames = 0
+                    val silenceLimit = 18 // ~1.8s after speech
+                    val energyThr = 750
                     while (isActive && isListening) {
                         val n = audioRecord?.read(buf, 0, buf.size) ?: -1
                         if (n <= 0) continue
                         pcmChunks.add(buf.copyOf(n))
+                        var peak = 0
+                        for (i in 0 until n) {
+                            val a = kotlin.math.abs(buf[i].toInt())
+                            if (a > peak) peak = a
+                        }
+                        if (peak >= energyThr) {
+                            speechSeen = true
+                            silentFrames = 0
+                        } else if (speechSeen) {
+                            silentFrames++
+                            if (silentFrames >= silenceLimit) {
+                                withContext(Dispatchers.Main) {
+                                    try { KeySoundPlayer.playDing(75) } catch (_: Exception) {}
+                                    binding.status.text = "⏹ توقف خودکار"
+                                    stopListening()
+                                }
+                                break
+                            }
+                        }
                         // Live feed: resample chunk to 16k then to Vosk
                         try {
                             val chunk16 = AudioCapture.to16k(buf.copyOf(n), captureRate)
